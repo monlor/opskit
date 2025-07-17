@@ -1,112 +1,112 @@
 # S3 Storage Sync
 
-S3存储同步工具，支持S3桶与本地目录双向同步，提供干运行预览和AWS凭证管理。
+S3 storage synchronization tool that supports bidirectional sync between S3 buckets and local directories, provides dry-run preview and AWS credential management.
 
-## 功能概述
+## Feature Overview
 
-- 支持S3桶与本地目录双向同步
-- 自动检测和安装AWS CLI
-- AWS凭证配置向导
-- 支持删除目标中不存在的文件
-- 提供干运行预览功能
-- 支持文件排除模式
+- Supports bidirectional sync between S3 buckets and local directories
+- Automatic detection and installation of AWS CLI
+- AWS credential configuration wizard
+- Supports deletion of files that don't exist in the target
+- Provides dry-run preview functionality
+- Supports file exclusion patterns
 
-## 使用方法
+## Usage
 
-### 基本语法
+### Basic Syntax
 
 ```bash
 opskit s3-sync <command> [args] [flags]
 ```
 
-### 可用命令
+### Available Commands
 
-#### upload - 上传文件到S3
+#### upload - Upload files to S3
 
-将本地文件或目录上传到S3桶。
+Upload local files or directories to S3 buckets.
 
 ```bash
 opskit s3-sync upload <source> <target> [flags]
 ```
 
-**参数:**
-- `source` - 源目录或文件 (必需)
-- `target` - S3桶和路径 (s3://bucket/path) (必需)
+**Parameters:**
+- `source` - Source directory or file (required)
+- `target` - S3 bucket and path (s3://bucket/path) (required)
 
-**标志:**
-- `--dry-run, -n` - 显示将要执行的操作，但不实际执行
-- `--exclude, -e` - 排除模式（支持通配符）
+**Flags:**
+- `--dry-run, -n` - Show what will be executed without actually running
+- `--exclude, -e` - Exclude pattern (supports wildcards)
 
-**示例:**
+**Examples:**
 ```bash
-# 上传整个目录
+# Upload entire directory
 opskit s3-sync upload /local/backup s3://my-bucket/backup/
 
-# 上传单个文件
+# Upload single file
 opskit s3-sync upload /local/file.txt s3://my-bucket/files/
 
-# 干运行模式
+# Dry run mode
 opskit s3-sync upload /local/backup s3://my-bucket/backup/ --dry-run
 
-# 排除特定文件
+# Exclude specific files
 opskit s3-sync upload /local/backup s3://my-bucket/backup/ --exclude "*.tmp"
 opskit s3-sync upload /local/backup s3://my-bucket/backup/ --exclude "logs/*"
 ```
 
-#### download - 从S3下载文件
+#### download - Download files from S3
 
-从S3桶下载文件到本地目录。
+Download files from S3 bucket to local directory.
 
 ```bash
 opskit s3-sync download <source> <target> [flags]
 ```
 
-**参数:**
-- `source` - S3桶和路径 (s3://bucket/path) (必需)
-- `target` - 目标目录 (必需)
+**Parameters:**
+- `source` - S3 bucket and path (s3://bucket/path) (required)
+- `target` - Target directory (required)
 
-**标志:**
-- `--dry-run, -n` - 显示将要执行的操作，但不实际执行
+**Flags:**
+- `--dry-run, -n` - Show what will be executed without actually running
 
-**示例:**
+**Examples:**
 ```bash
-# 下载整个S3路径
+# Download entire S3 path
 opskit s3-sync download s3://my-bucket/backup/ /local/restore/
 
-# 下载单个文件
+# Download single file
 opskit s3-sync download s3://my-bucket/files/file.txt /local/
 
-# 干运行模式
+# Dry run mode
 opskit s3-sync download s3://my-bucket/backup/ /local/restore/ --dry-run
 ```
 
-## 功能特点
+## Features
 
-### 同步机制
-- 使用AWS CLI进行数据传输
-- 支持增量同步，只传输变更的文件
-- 自动处理大文件分片上传
-- 支持并行传输提高效率
+### Synchronization Mechanism
+- Uses AWS CLI for data transmission
+- Supports incremental sync, only transfers changed files
+- Automatically handles large file multipart upload
+- Supports parallel transmission for improved efficiency
 
-### 安全特性
-1. **凭证管理**: 支持多种AWS凭证配置方式
-2. **权限验证**: 上传前验证S3桶访问权限
-3. **干运行预览**: 执行前预览将要进行的操作
-4. **确认机制**: 危险操作前要求用户确认
+### Security Features
+1. **Credential management**: Supports multiple AWS credential configuration methods
+2. **Permission verification**: Verifies S3 bucket access permissions before upload
+3. **Dry-run preview**: Preview operations before execution
+4. **Confirmation mechanism**: Requires user confirmation for dangerous operations
 
-### 高级功能
-- 支持文件排除模式
-- 自动创建目标目录
-- 传输进度显示
-- 错误重试机制
+### Advanced Features
+- Supports file exclusion patterns
+- Automatically creates target directories
+- Displays transfer progress
+- Error retry mechanism
 
-## 依赖要求
+## Dependencies
 
-### 必需依赖
-- `aws-cli` - AWS命令行工具
+### Required Dependencies
+- `aws-cli` - AWS command line tool
 
-### 自动安装
-工具会自动检测依赖并提供安装选项：
+### Automatic Installation
+The tool will automatically detect dependencies and provide installation options:
 
 **macOS (Homebrew):**
 ```bash
@@ -123,27 +123,27 @@ sudo apt-get install awscli
 sudo yum install awscli
 ```
 
-## AWS凭证配置
+## AWS Credential Configuration
 
-### 配置方式
+### Configuration Methods
 
-1. **AWS CLI配置**
+1. **AWS CLI configuration**
    ```bash
    aws configure
    ```
 
-2. **环境变量**
+2. **Environment variables**
    ```bash
    export AWS_ACCESS_KEY_ID=your_access_key
    export AWS_SECRET_ACCESS_KEY=your_secret_key
    export AWS_DEFAULT_REGION=us-east-1
    ```
 
-3. **IAM角色** (EC2实例)
-   - 为EC2实例附加IAM角色
-   - 自动获取临时凭证
+3. **IAM roles** (EC2 instances)
+   - Attach IAM role to EC2 instance
+   - Automatically obtain temporary credentials
 
-4. **AWS凭证文件**
+4. **AWS credential files**
    ```bash
    # ~/.aws/credentials
    [default]
@@ -156,9 +156,9 @@ sudo yum install awscli
    output = json
    ```
 
-### 权限要求
+### Permission Requirements
 
-**S3桶权限:**
+**S3 bucket permissions:**
 ```json
 {
     "Version": "2012-10-17",
@@ -180,169 +180,169 @@ sudo yum install awscli
 }
 ```
 
-## 使用示例
+## Usage Examples
 
-### 完整上传流程
+### Complete Upload Workflow
 
 ```bash
-# 1. 验证AWS凭证
+# 1. Verify AWS credentials
 aws sts get-caller-identity
 
-# 2. 干运行预览
+# 2. Dry run preview
 opskit s3-sync upload /local/backup s3://my-bucket/backup/ --dry-run
 
-# 3. 执行上传
+# 3. Execute upload
 opskit s3-sync upload /local/backup s3://my-bucket/backup/
 
-# 4. 排除特定文件类型
+# 4. Exclude specific file types
 opskit s3-sync upload /local/backup s3://my-bucket/backup/ --exclude "*.log" --exclude "tmp/*"
 ```
 
-### 批量文件管理
+### Batch File Management
 
 ```bash
-# 上传多个目录
+# Upload multiple directories
 opskit s3-sync upload /var/log s3://my-bucket/logs/
 opskit s3-sync upload /var/www s3://my-bucket/web/
 opskit s3-sync upload /etc s3://my-bucket/config/
 
-# 从S3恢复
+# Restore from S3
 opskit s3-sync download s3://my-bucket/backup/ /restore/
 ```
 
-### 使用排除模式
+### Using Exclude Patterns
 
 ```bash
-# 排除临时文件和日志
+# Exclude temporary files and logs
 opskit s3-sync upload /project s3://my-bucket/project/ \
   --exclude "*.tmp" \
   --exclude "*.log" \
   --exclude "node_modules/*" \
   --exclude ".git/*"
 
-# 排除大文件
+# Exclude large files
 opskit s3-sync upload /media s3://my-bucket/media/ \
   --exclude "*.mov" \
   --exclude "*.avi"
 ```
 
-## 故障排除
+## Troubleshooting
 
-### 常见问题
+### Common Issues
 
-1. **AWS凭证未配置**
+1. **AWS credentials not configured**
    ```
    Error: Unable to locate credentials
    ```
-   - 运行 `aws configure` 配置凭证
-   - 检查环境变量设置
-   - 验证IAM角色配置
+   - Run `aws configure` to configure credentials
+   - Check environment variable settings
+   - Verify IAM role configuration
 
-2. **权限不足**
+2. **Insufficient permissions**
    ```
    Error: Access Denied
    ```
-   - 检查S3桶权限
-   - 验证IAM策略
-   - 确认桶是否存在
+   - Check S3 bucket permissions
+   - Verify IAM policies
+   - Confirm bucket exists
 
-3. **网络连接问题**
+3. **Network connection issues**
    ```
    Error: Unable to connect to S3
    ```
-   - 检查网络连接
-   - 验证防火墙设置
-   - 检查代理配置
+   - Check network connection
+   - Verify firewall settings
+   - Check proxy configuration
 
-4. **磁盘空间不足**
+4. **Insufficient disk space**
    ```
    Error: No space left on device
    ```
-   - 清理本地磁盘空间
-   - 使用增量同步
-   - 分批处理大文件
+   - Clean up local disk space
+   - Use incremental sync
+   - Process large files in batches
 
-### 调试模式
+### Debug Mode
 
-启用调试模式查看详细日志：
+Enable debug mode to view detailed logs:
 
 ```bash
 export OPSKIT_DEBUG=1
 opskit s3-sync upload /local/path s3://bucket/path --dry-run
 ```
 
-启用AWS CLI调试：
+Enable AWS CLI debugging:
 ```bash
 export AWS_CLI_DEBUG=1
 opskit s3-sync upload /local/path s3://bucket/path
 ```
 
-## 最佳实践
+## Best Practices
 
-1. **备份策略**
-   - 定期备份重要数据到S3
-   - 使用版本控制保护数据
-   - 设置生命周期规则管理存储成本
+1. **Backup strategy**
+   - Regularly backup important data to S3
+   - Use versioning to protect data
+   - Set lifecycle rules to manage storage costs
 
-2. **性能优化**
-   - 使用并行传输提高速度
-   - 合理设置分片大小
-   - 在网络良好的环境执行同步
+2. **Performance optimization**
+   - Use parallel transmission to improve speed
+   - Set appropriate chunk size
+   - Execute sync in good network environment
 
-3. **安全管理**
-   - 使用IAM角色而非长期凭证
-   - 定期轮换访问密钥
-   - 启用S3桶日志记录
+3. **Security management**
+   - Use IAM roles instead of long-term credentials
+   - Regularly rotate access keys
+   - Enable S3 bucket logging
 
-4. **成本控制**
-   - 使用适当的存储类别
-   - 设置生命周期规则
-   - 监控数据传输费用
+4. **Cost control**
+   - Use appropriate storage classes
+   - Set lifecycle rules
+   - Monitor data transfer costs
 
-## 高级配置
+## Advanced Configuration
 
-### 自定义AWS CLI配置
+### Custom AWS CLI Configuration
 
 ```bash
-# 使用特定配置文件
+# Use specific profile
 export AWS_PROFILE=production
 opskit s3-sync upload /data s3://prod-bucket/data/
 
-# 使用特定区域
+# Use specific region
 export AWS_DEFAULT_REGION=eu-west-1
 opskit s3-sync upload /data s3://eu-bucket/data/
 ```
 
-### 大文件处理
+### Large File Handling
 
 ```bash
-# 配置分片上传阈值
+# Configure multipart upload threshold
 aws configure set default.s3.multipart_threshold 64MB
 aws configure set default.s3.multipart_chunksize 16MB
 
-# 配置最大并发数
+# Configure maximum concurrent requests
 aws configure set default.s3.max_concurrent_requests 20
 ```
 
-### 同步脚本示例
+### Sync Script Example
 
 ```bash
 #!/bin/bash
-# 自动化备份脚本
+# Automated backup script
 
-# 设置变量
+# Set variables
 SOURCE_DIR="/important/data"
 S3_BUCKET="s3://backup-bucket"
 DATE=$(date +%Y%m%d)
 BACKUP_PATH="${S3_BUCKET}/daily-backup/${DATE}"
 
-# 执行备份
+# Execute backup
 echo "Starting backup to ${BACKUP_PATH}"
 opskit s3-sync upload "$SOURCE_DIR" "$BACKUP_PATH" \
   --exclude "*.tmp" \
   --exclude "logs/*"
 
-# 验证备份
+# Verify backup
 if [ $? -eq 0 ]; then
     echo "Backup completed successfully"
 else
@@ -351,19 +351,19 @@ else
 fi
 ```
 
-## 安全注意事项
+## Security Considerations
 
-1. **数据加密**
-   - 启用S3桶加密
-   - 使用SSL/TLS传输
-   - 考虑客户端加密
+1. **Data encryption**
+   - Enable S3 bucket encryption
+   - Use SSL/TLS transmission
+   - Consider client-side encryption
 
-2. **访问控制**
-   - 使用最小权限原则
-   - 定期审核IAM策略
-   - 监控访问日志
+2. **Access control**
+   - Use minimum privilege principle
+   - Regularly audit IAM policies
+   - Monitor access logs
 
-3. **合规性**
-   - 了解数据存储地区要求
-   - 遵守数据保护法规
-   - 实施数据保留政策
+3. **Compliance**
+   - Understand data storage region requirements
+   - Comply with data protection regulations
+   - Implement data retention policies

@@ -1,98 +1,98 @@
 # Test Python Tool
 
-Python工具示例，展示如何在OpsKit中集成Python脚本，支持命令行参数处理和环境变量传递。
+Python tool example that demonstrates how to integrate Python scripts into OpsKit, supporting command line parameter processing and environment variable passing.
 
-## 功能概述
+## Feature Overview
 
-- 展示Python脚本集成到OpsKit的方法
-- 支持命令行参数处理
-- 环境变量传递示例
-- 基本的日志输出和错误处理
-- 多种操作模式展示
+- Demonstrates Python script integration into OpsKit
+- Supports command line parameter processing
+- Environment variable passing examples
+- Basic log output and error handling
+- Multiple operation modes demonstration
 
-## 使用方法
+## Usage
 
-### 基本语法
+### Basic Syntax
 
 ```bash
 opskit test-python <command> [args] [flags]
 ```
 
-### 可用命令
+### Available Commands
 
-#### test - 运行简单测试
+#### test - Run simple test
 
-执行基本的测试功能，展示Python脚本的基本能力。
+Executes basic test functionality to demonstrate Python script capabilities.
 
 ```bash
 opskit test-python test [flags]
 ```
 
-**标志:**
-- `--verbose, -V` - 启用详细输出
+**Flags:**
+- `--verbose, -V` - Enable verbose output
 
-**示例:**
+**Examples:**
 ```bash
-# 基本测试
+# Basic test
 opskit test-python test
 
-# 详细输出模式
+# Verbose output mode
 opskit test-python test --verbose
 ```
 
-#### process - 处理数据
+#### process - Process data
 
-处理输入数据，展示参数处理和数据操作。
+Process input data to demonstrate parameter handling and data operations.
 
 ```bash
 opskit test-python process <input> [flags]
 ```
 
-**参数:**
-- `input` - 要处理的输入数据 (必需)
+**Parameters:**
+- `input` - Input data to process (required)
 
-**标志:**
-- `--dry-run, -n` - 显示将要执行的操作，但不实际执行
+**Flags:**
+- `--dry-run, -n` - Show what will be executed without actually executing
 
-**示例:**
+**Examples:**
 ```bash
-# 处理文本数据
+# Process text data
 opskit test-python process "Hello, World!"
 
-# 处理JSON数据
+# Process JSON data
 opskit test-python process '{"name": "test", "value": 123}'
 
-# 干运行模式
+# Dry run mode
 opskit test-python process "test data" --dry-run
 ```
 
-## 功能特点
+## Features
 
-### Python集成
-- 使用python3执行脚本
-- 支持命令行参数解析
-- 环境变量自动传递
-- 标准输出和错误处理
+### Python Integration
+- Uses python3 to execute scripts
+- Supports command line parameter parsing
+- Automatic environment variable passing
+- Standard output and error handling
 
-### 示例功能
-1. **基本测试**: 展示Python脚本的基本功能
-2. **数据处理**: 展示参数处理和数据操作
-3. **日志输出**: 展示不同级别的日志输出
-4. **错误处理**: 展示错误处理机制
+### Example Functions
+1. **Basic test**: Demonstrates basic Python script functionality
+2. **Data processing**: Demonstrates parameter handling and data operations
+3. **Log output**: Demonstrates different levels of log output
+4. **Error handling**: Demonstrates error handling mechanisms
 
-### 开发参考
-- 命令行参数解析模式
-- 环境变量读取方法
-- 日志输出格式化
-- 退出码处理
+### Development Reference
+- Command line parameter parsing patterns
+- Environment variable reading methods
+- Log output formatting
+- Exit code handling
 
-## 依赖要求
+## Dependencies
 
-### 必需依赖
-- `python3` - Python 3.x 解释器
+### Required Dependencies
+- `python3` - Python 3.x interpreter
 
-### 自动安装
-工具会自动检测依赖并提供安装选项：
+### Automatic Installation
+The tool will automatically detect dependencies and provide installation options:
 
 **macOS (Homebrew):**
 ```bash
@@ -109,9 +109,9 @@ sudo apt-get install python3
 sudo yum install python3
 ```
 
-## 代码示例
+## Code Example
 
-### 脚本结构
+### Script Structure
 ```python
 #!/usr/bin/env python3
 import sys
@@ -194,19 +194,19 @@ if __name__ == '__main__':
     main()
 ```
 
-## 使用示例
+## Usage Examples
 
-### 基本功能测试
+### Basic Functionality Test
 
 ```bash
-# 简单测试
+# Simple test
 opskit test-python test
 
-# 详细输出测试
+# Verbose output test
 opskit test-python test --verbose
 ```
 
-**输出示例:**
+**Output example:**
 ```
 🐍 Python Test Tool
 ===================
@@ -221,20 +221,20 @@ opskit test-python test --verbose
 ✅ Test completed successfully
 ```
 
-### 数据处理示例
+### Data Processing Examples
 
 ```bash
-# 处理文本数据
+# Process text data
 opskit test-python process "Hello, OpsKit!"
 
-# 处理JSON数据
+# Process JSON data
 opskit test-python process '{"name": "OpsKit", "version": "1.0.0", "language": "Go"}'
 
-# 干运行模式
+# Dry run mode
 opskit test-python process "test data" --dry-run
 ```
 
-**JSON处理输出:**
+**JSON processing output:**
 ```
 🔄 Processing input: {"name": "OpsKit", "version": "1.0.0", "language": "Go"}
 📋 Parsed JSON data: {'name': 'OpsKit', 'version': '1.0.0', 'language': 'Go'}
@@ -243,7 +243,7 @@ opskit test-python process "test data" --dry-run
 ✅ Processing completed
 ```
 
-**文本处理输出:**
+**Text processing output:**
 ```
 🔄 Processing input: Hello, OpsKit!
 📝 Processing as text: Hello, OpsKit!
@@ -252,11 +252,11 @@ opskit test-python process "test data" --dry-run
 ✅ Processing completed
 ```
 
-## 开发指南
+## Development Guide
 
-### 创建Python工具
+### Creating Python Tools
 
-1. **创建Python脚本**
+1. **Create Python script**
    ```python
    #!/usr/bin/env python3
    import sys
@@ -274,7 +274,7 @@ opskit test-python process "test data" --dry-run
        main()
    ```
 
-2. **更新tools.json配置**
+2. **Update tools.json configuration**
    ```json
    {
      "id": "your-python-tool",
@@ -294,9 +294,9 @@ opskit test-python process "test data" --dry-run
    }
    ```
 
-### 最佳实践
+### Best Practices
 
-1. **错误处理**
+1. **Error handling**
    ```python
    try:
        # Your code here
@@ -306,13 +306,13 @@ opskit test-python process "test data" --dry-run
        sys.exit(1)
    ```
 
-2. **环境变量使用**
+2. **Environment variable usage**
    ```python
    debug = os.getenv('OPSKIT_DEBUG', 'false').lower() == 'true'
    work_dir = os.getenv('OPSKIT_DIR', os.path.expanduser('~/.opskit'))
    ```
 
-3. **日志输出**
+3. **Log output**
    ```python
    def log_info(message):
        print(f"ℹ️  {message}")
@@ -324,7 +324,7 @@ opskit test-python process "test data" --dry-run
        print(f"✅ {message}")
    ```
 
-4. **参数验证**
+4. **Parameter validation**
    ```python
    def validate_args(args):
        if not args.input:
@@ -336,43 +336,43 @@ opskit test-python process "test data" --dry-run
            sys.exit(1)
    ```
 
-## 故障排除
+## Troubleshooting
 
-### 常见问题
+### Common Issues
 
-1. **Python未安装**
+1. **Python not installed**
    ```
    Error: python3: command not found
    ```
-   - 安装Python 3
-   - 检查PATH环境变量
+   - Install Python 3
+   - Check PATH environment variable
 
-2. **权限问题**
+2. **Permission issues**
    ```
    Error: Permission denied
    ```
-   - 检查脚本执行权限
-   - 使用chmod +x设置权限
+   - Check script execution permissions
+   - Use chmod +x to set permissions
 
-3. **模块导入错误**
+3. **Module import errors**
    ```
    Error: ModuleNotFoundError: No module named 'xxx'
    ```
-   - 安装所需的Python模块
-   - 使用pip install安装依赖
+   - Install required Python modules
+   - Use pip install to install dependencies
 
-### 调试模式
+### Debug Mode
 
-启用调试模式查看详细信息：
+Enable debug mode to view detailed information:
 
 ```bash
 export OPSKIT_DEBUG=1
 opskit test-python test --verbose
 ```
 
-## 扩展功能
+## Extended Features
 
-### 添加外部依赖
+### Adding External Dependencies
 
 ```python
 # requirements.txt
@@ -380,13 +380,13 @@ requests>=2.25.0
 pyyaml>=5.4.0
 click>=8.0.0
 
-# 在脚本中使用
+# Use in script
 import requests
 import yaml
 import click
 ```
 
-### 配置文件支持
+### Configuration File Support
 
 ```python
 import configparser
@@ -402,7 +402,7 @@ def load_config():
     return None
 ```
 
-### 异步操作
+### Asynchronous Operations
 
 ```python
 import asyncio
@@ -419,12 +419,12 @@ def main():
     print(f"Result: {result}")
 ```
 
-## 性能优化
+## Performance Optimization
 
-1. **使用适当的数据结构**
-2. **避免不必要的循环**
-3. **使用生成器处理大数据**
-4. **合理使用缓存**
-5. **异步处理I/O操作**
+1. **Use appropriate data structures**
+2. **Avoid unnecessary loops**
+3. **Use generators for large data**
+4. **Use caching reasonably**
+5. **Handle I/O operations asynchronously**
 
-这个工具主要用于展示如何在OpsKit中集成Python脚本，为开发其他Python工具提供参考。
+This tool is mainly used to demonstrate how to integrate Python scripts into OpsKit, providing reference for developing other Python tools.

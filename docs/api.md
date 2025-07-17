@@ -1,12 +1,12 @@
-# API 文档
+# API Documentation
 
-本文档描述了OpsKit的内部API接口和配置格式。
+This document describes the internal API interfaces and configuration formats of OpsKit.
 
-## 配置文件格式
+## Configuration File Formats
 
 ### tools.json
 
-工具配置文件，定义了所有可用的工具和命令。
+Tool configuration file that defines all available tools and commands.
 
 ```json
 {
@@ -49,7 +49,7 @@
 
 ### dependencies.json
 
-依赖配置文件，定义了工具所需的依赖包。
+Dependency configuration file that defines required packages for tools.
 
 ```json
 {
@@ -67,11 +67,11 @@
 }
 ```
 
-## 内部API
+## Internal APIs
 
-### Config包
+### Config Package
 
-#### 类型定义
+#### Type Definitions
 
 ```go
 type Config struct {
@@ -112,22 +112,22 @@ type Flag struct {
 }
 ```
 
-#### 方法
+#### Methods
 
 ```go
-// LoadConfig 从文件加载配置
+// LoadConfig loads configuration from file
 func LoadConfig(path string) (*Config, error)
 
-// GetTool 根据ID获取工具
+// GetTool gets tool by ID
 func (c *Config) GetTool(id string) (*Tool, error)
 
-// GetCommand 根据名称获取命令
+// GetCommand gets command by name
 func (t *Tool) GetCommand(name string) (*Command, error)
 ```
 
-### Executor包
+### Executor Package
 
-#### 接口定义
+#### Interface Definition
 
 ```go
 type Executor interface {
@@ -135,7 +135,7 @@ type Executor interface {
 }
 ```
 
-#### 实现
+#### Implementation
 
 ```go
 type ScriptExecutor struct {
@@ -148,21 +148,21 @@ func NewScriptExecutor(workDir string, debug bool) *ScriptExecutor
 func (e *ScriptExecutor) Execute(tool Tool, command string, args []string) error
 ```
 
-### Dynamic包
+### Dynamic Package
 
-#### 方法
+#### Methods
 
 ```go
-// GenerateCommand 生成动态命令
+// GenerateCommand generates dynamic command
 func GenerateCommand(tool Tool) *cobra.Command
 
-// GenerateSubCommand 生成子命令
+// GenerateSubCommand generates subcommand
 func GenerateSubCommand(tool Tool, command Command) *cobra.Command
 ```
 
-### Dependencies包
+### Dependencies Package
 
-#### 类型定义
+#### Type Definitions
 
 ```go
 type DependencyManager struct {
@@ -177,53 +177,53 @@ type Dependency struct {
 }
 ```
 
-#### 方法
+#### Methods
 
 ```go
-// NewDependencyManager 创建依赖管理器
+// NewDependencyManager creates dependency manager
 func NewDependencyManager() *DependencyManager
 
-// LoadDependencies 加载依赖配置
+// LoadDependencies loads dependency configuration
 func (dm *DependencyManager) LoadDependencies(path string) error
 
-// CheckDependencies 检查依赖
+// CheckDependencies checks dependencies
 func (dm *DependencyManager) CheckDependencies(deps []string) error
 
-// InstallDependency 安装依赖
+// InstallDependency installs dependency
 func (dm *DependencyManager) InstallDependency(name string) error
 ```
 
-## 环境变量
+## Environment Variables
 
-### 系统环境变量
+### System Environment Variables
 
-| 变量名 | 描述 | 默认值 |
-|--------|------|--------|
-| `OPSKIT_DIR` | 工作目录 | `$HOME/.opskit` |
-| `OPSKIT_DEBUG` | 调试模式 | `false` |
-| `OPSKIT_RELEASE` | 版本跟踪 | `main` |
-| `OPSKIT_NO_AUTO_UPDATE` | 禁用自动更新 | `false` |
-| `OPSKIT_UPDATE_INTERVAL` | 更新间隔(小时) | `1` |
-| `GITHUB_REPO` | GitHub仓库 | `monlor/opskit` |
+| Variable Name | Description | Default Value |
+|---------------|-------------|---------------|
+| `OPSKIT_DIR` | Working directory | `$HOME/.opskit` |
+| `OPSKIT_DEBUG` | Debug mode | `false` |
+| `OPSKIT_RELEASE` | Version tracking | `main` |
+| `OPSKIT_NO_AUTO_UPDATE` | Disable auto-update | `false` |
+| `OPSKIT_UPDATE_INTERVAL` | Update interval (hours) | `1` |
+| `GITHUB_REPO` | GitHub repository | `monlor/opskit` |
 
-### 工具环境变量
+### Tool Environment Variables
 
-工具执行时会自动传递以下环境变量：
+The following environment variables are automatically passed to tool execution:
 
-| 变量名 | 描述 |
-|--------|------|
-| `OPSKIT_TOOL_ID` | 工具ID |
-| `OPSKIT_TOOL_NAME` | 工具名称 |
-| `OPSKIT_TOOL_VERSION` | 工具版本 |
-| `OPSKIT_COMMAND` | 执行的命令 |
-| `OPSKIT_WORK_DIR` | 工作目录 |
-| `OPSKIT_DEBUG` | 调试模式 |
+| Variable Name | Description |
+|---------------|-------------|
+| `OPSKIT_TOOL_ID` | Tool ID |
+| `OPSKIT_TOOL_NAME` | Tool name |
+| `OPSKIT_TOOL_VERSION` | Tool version |
+| `OPSKIT_COMMAND` | Executed command |
+| `OPSKIT_WORK_DIR` | Working directory |
+| `OPSKIT_DEBUG` | Debug mode |
 
-## 扩展接口
+## Extension Interfaces
 
-### 工具类型扩展
+### Tool Type Extension
 
-要添加新的工具类型，需要在executor中添加处理逻辑：
+To add new tool types, add processing logic in the executor:
 
 ```go
 func (e *ScriptExecutor) Execute(tool Tool, command string, args []string) error {
@@ -244,9 +244,9 @@ func (e *ScriptExecutor) Execute(tool Tool, command string, args []string) error
 }
 ```
 
-### 依赖管理扩展
+### Dependency Management Extension
 
-要添加新的包管理器支持，需要在dependencies中添加处理逻辑：
+To add new package manager support, add processing logic in dependencies:
 
 ```go
 func (dm *DependencyManager) getPackageManager() string {
@@ -269,9 +269,9 @@ func (dm *DependencyManager) getPackageManager() string {
 }
 ```
 
-## 钩子系统
+## Hook System
 
-### 工具执行钩子
+### Tool Execution Hooks
 
 ```go
 type ToolHook interface {
@@ -288,7 +288,7 @@ func (hm *HookManager) ExecuteBeforeHooks(tool Tool, command string, args []stri
 func (hm *HookManager) ExecuteAfterHooks(tool Tool, command string, args []string, err error) error
 ```
 
-### 使用示例
+### Usage Example
 
 ```go
 type LoggingHook struct{}
@@ -307,115 +307,13 @@ func (h *LoggingHook) AfterExecute(tool Tool, command string, args []string, err
     return nil
 }
 
-// 注册钩子
+// Register hook
 hookManager.RegisterHook(&LoggingHook{})
 ```
 
-## 错误处理
+## Event System
 
-### 错误类型
-
-```go
-type OpsKitError struct {
-    Code    int
-    Message string
-    Cause   error
-}
-
-func (e *OpsKitError) Error() string {
-    if e.Cause != nil {
-        return fmt.Sprintf("[%d] %s: %v", e.Code, e.Message, e.Cause)
-    }
-    return fmt.Sprintf("[%d] %s", e.Code, e.Message)
-}
-
-// 错误代码
-const (
-    ErrCodeConfigNotFound = 1001
-    ErrCodeToolNotFound   = 1002
-    ErrCodeCommandNotFound = 1003
-    ErrCodeDependencyMissing = 1004
-    ErrCodeExecutionFailed = 1005
-)
-```
-
-### 错误处理示例
-
-```go
-func executeCommand(tool Tool, command string) error {
-    if tool.ID == "" {
-        return &OpsKitError{
-            Code:    ErrCodeToolNotFound,
-            Message: "Tool not found",
-        }
-    }
-    
-    if err := checkDependencies(tool.Dependencies); err != nil {
-        return &OpsKitError{
-            Code:    ErrCodeDependencyMissing,
-            Message: "Missing dependencies",
-            Cause:   err,
-        }
-    }
-    
-    return nil
-}
-```
-
-## 插件系统
-
-### 插件接口
-
-```go
-type Plugin interface {
-    Name() string
-    Version() string
-    Initialize() error
-    Execute(command string, args []string) error
-    Cleanup() error
-}
-
-type PluginManager struct {
-    plugins map[string]Plugin
-}
-
-func (pm *PluginManager) RegisterPlugin(plugin Plugin) error
-func (pm *PluginManager) GetPlugin(name string) (Plugin, error)
-func (pm *PluginManager) ExecutePlugin(name string, command string, args []string) error
-```
-
-### 插件示例
-
-```go
-type MyPlugin struct{}
-
-func (p *MyPlugin) Name() string {
-    return "my-plugin"
-}
-
-func (p *MyPlugin) Version() string {
-    return "1.0.0"
-}
-
-func (p *MyPlugin) Initialize() error {
-    // 初始化逻辑
-    return nil
-}
-
-func (p *MyPlugin) Execute(command string, args []string) error {
-    // 执行逻辑
-    return nil
-}
-
-func (p *MyPlugin) Cleanup() error {
-    // 清理逻辑
-    return nil
-}
-```
-
-## 事件系统
-
-### 事件类型
+### Event Types
 
 ```go
 type Event struct {
@@ -436,14 +334,14 @@ func (em *EventManager) RegisterHandler(eventType string, handler EventHandler)
 func (em *EventManager) EmitEvent(event Event) error
 ```
 
-### 事件使用
+### Event Usage
 
 ```go
-// 注册事件处理器
+// Register event handlers
 eventManager.RegisterHandler("tool.started", &ToolStartedHandler{})
 eventManager.RegisterHandler("tool.completed", &ToolCompletedHandler{})
 
-// 发送事件
+// Send events
 eventManager.EmitEvent(Event{
     Type:      "tool.started",
     Timestamp: time.Now(),
@@ -451,9 +349,9 @@ eventManager.EmitEvent(Event{
 })
 ```
 
-## 配置验证
+## Configuration Validation
 
-### 验证规则
+### Validation Rules
 
 ```go
 type ConfigValidator struct {
@@ -478,7 +376,7 @@ func (r *ToolIDUniqueRule) Validate(config *Config) error {
 }
 ```
 
-### 验证使用
+### Validation Usage
 
 ```go
 validator := &ConfigValidator{
@@ -494,9 +392,9 @@ if err := validator.Validate(config); err != nil {
 }
 ```
 
-## 性能监控
+## Performance Monitoring
 
-### 指标收集
+### Metrics Collection
 
 ```go
 type Metrics struct {
@@ -514,7 +412,7 @@ func (mc *MetricsCollector) RecordExecution(toolID string, duration time.Duratio
 func (mc *MetricsCollector) GetMetrics() *Metrics
 ```
 
-### 监控使用
+### Monitoring Usage
 
 ```go
 collector := &MetricsCollector{
@@ -525,10 +423,10 @@ collector := &MetricsCollector{
     },
 }
 
-// 记录执行
+// Record execution
 start := time.Now()
 err := executor.Execute(tool, command, args)
 collector.RecordExecution(tool.ID, time.Since(start), err)
 ```
 
-这些API接口为OpsKit提供了强大的扩展能力，允许开发者根据需要添加新功能和集成第三方系统。
+These API interfaces provide powerful extensibility for OpsKit, allowing developers to add new features and integrate third-party systems as needed.

@@ -1,82 +1,82 @@
-# 开发指南
+# Development Guide
 
-本指南详细介绍了如何为OpsKit开发新工具和贡献代码。
+This guide provides detailed instructions for developing new tools for OpsKit and contributing code.
 
-## 开发环境设置
+## Development Environment Setup
 
-### 系统要求
-- **Go**: 1.21 或更高版本
-- **Git**: 版本控制
-- **Make**: 构建工具（可选）
+### System Requirements
+- **Go**: 1.21 or higher
+- **Git**: Version control
+- **Make**: Build tool (optional)
 
-### 环境准备
+### Environment Preparation
 
-#### 1. 克隆仓库
+#### 1. Clone Repository
 ```bash
 git clone https://github.com/monlor/opskit.git
 cd opskit
 ```
 
-#### 2. 安装依赖
+#### 2. Install Dependencies
 ```bash
 go mod download
 ```
 
-#### 3. 构建项目
+#### 3. Build Project
 ```bash
 ./build.sh
 ```
 
-#### 4. 运行测试
+#### 4. Run Tests
 ```bash
 go test ./... -v
 ```
 
-## 项目结构
+## Project Structure
 
 ```
 opskit/
-├── cmd/                    # CLI命令定义
-│   ├── list.go            # 列出工具命令
-│   ├── root.go            # 根命令和动态命令加载
-│   └── run.go             # 运行工具命令
-├── internal/               # 内部包
-│   ├── config/            # 配置管理
-│   │   ├── config.go      # 配置加载和解析
-│   │   └── config_test.go # 配置测试
-│   ├── dependencies/      # 依赖管理
-│   │   └── manager.go     # 依赖检查和安装
-│   ├── downloader/        # 文件下载器
-│   │   └── downloader.go  # 远程文件下载
-│   ├── dynamic/           # 动态命令生成
-│   │   ├── command.go     # 动态命令生成
-│   │   └── command_test.go# 动态命令测试
-│   ├── executor/          # 工具执行器
-│   │   ├── executor.go    # 工具执行逻辑
-│   │   └── executor_test.go# 执行器测试
-│   └── logger/            # 日志系统
-│       └── logger.go      # 日志输出
-├── tools/                 # 工具脚本和配置
-│   ├── tools.json         # 工具配置
-│   ├── dependencies.json  # 依赖配置
-│   ├── mysql-sync.sh      # MySQL同步工具
-│   ├── s3-sync.sh         # S3同步工具
-│   └── test-python.py     # Python测试工具
-├── docs/                  # 文档
-│   ├── installation.md    # 安装指南
-│   ├── development.md     # 开发指南
-│   └── tools/             # 工具文档
-├── build.sh               # 构建脚本
-├── install.sh             # 安装脚本
-├── main.go                # 主入口
-└── README.md              # 项目说明
+├── cmd/                    # CLI command definitions
+│   ├── list.go            # List tools command
+│   ├── root.go            # Root command and dynamic command loading
+│   └── run.go             # Run tool command
+├── internal/               # Internal packages
+│   ├── config/            # Configuration management
+│   │   ├── config.go      # Configuration loading and parsing
+│   │   └── config_test.go # Configuration tests
+│   ├── dependencies/      # Dependency management
+│   │   └── manager.go     # Dependency checking and installation
+│   ├── downloader/        # File downloader
+│   │   └── downloader.go  # Remote file download
+│   ├── dynamic/           # Dynamic command generation
+│   │   ├── command.go     # Dynamic command generation
+│   │   └── command_test.go# Dynamic command tests
+│   ├── executor/          # Tool executor
+│   │   ├── executor.go    # Tool execution logic
+│   │   └── executor_test.go# Executor tests
+│   └── logger/            # Logging system
+│       └── logger.go      # Log output
+├── tools/                 # Tool scripts and configurations
+│   ├── tools.json         # Tool configuration
+│   ├── dependencies.json  # Dependency configuration
+│   ├── mysql-sync.sh      # MySQL sync tool
+│   ├── s3-sync.sh         # S3 sync tool
+│   └── test-python.py     # Python test tool
+├── docs/                  # Documentation
+│   ├── installation.md    # Installation guide
+│   ├── development.md     # Development guide
+│   └── tools/             # Tool documentation
+├── build.sh               # Build script
+├── install.sh             # Installation script
+├── main.go                # Main entry
+└── README.md              # Project description
 ```
 
-## 核心组件
+## Core Components
 
-### 1. 配置管理 (internal/config)
+### 1. Configuration Management (internal/config)
 
-负责加载和解析工具配置文件：
+Responsible for loading and parsing tool configuration files:
 
 ```go
 type Config struct {
@@ -97,9 +97,9 @@ type Tool struct {
 }
 ```
 
-### 2. 工具执行器 (internal/executor)
+### 2. Tool Executor (internal/executor)
 
-负责执行不同类型的工具脚本：
+Responsible for executing different types of tool scripts:
 
 ```go
 type Executor interface {
@@ -127,9 +127,9 @@ func (e *ScriptExecutor) Execute(tool Tool, command string, args []string) error
 }
 ```
 
-### 3. 动态命令生成 (internal/dynamic)
+### 3. Dynamic Command Generation (internal/dynamic)
 
-基于配置文件动态生成Cobra命令：
+Generates Cobra commands based on configuration files:
 
 ```go
 func GenerateCommand(tool Tool) *cobra.Command {
@@ -148,9 +148,9 @@ func GenerateCommand(tool Tool) *cobra.Command {
 }
 ```
 
-### 4. 依赖管理 (internal/dependencies)
+### 4. Dependency Management (internal/dependencies)
 
-自动检查和安装工具依赖：
+Automatically checks and installs tool dependencies:
 
 ```go
 type DependencyManager struct {
@@ -174,30 +174,30 @@ func (dm *DependencyManager) CheckDependencies(deps []string) error {
 }
 ```
 
-## 添加新工具
+## Adding New Tools
 
-### 步骤1: 创建工具脚本
+### Step 1: Create Tool Script
 
-在`tools/`目录下创建工具脚本：
+Create tool scripts in the `tools/` directory:
 
 ```bash
-# 创建Shell工具
+# Create Shell tool
 cat > tools/my-tool.sh << 'EOF'
 #!/bin/bash
 set -euo pipefail
 
-# 工具脚本自己处理参数
+# Tool script handles parameters itself
 command=$1
 shift
 
 case "$command" in
     "deploy")
         echo "Deploying with args: $@"
-        # 实现部署逻辑
+        # Implement deployment logic
         ;;
     "status")
         echo "Checking status with args: $@"
-        # 实现状态检查逻辑
+        # Implement status checking logic
         ;;
     *)
         echo "Unknown command: $command"
@@ -210,7 +210,7 @@ chmod +x tools/my-tool.sh
 ```
 
 ```python
-# 创建Python工具
+# Create Python tool
 cat > tools/my-python-tool.py << 'EOF'
 #!/usr/bin/env python3
 import sys
@@ -245,9 +245,9 @@ EOF
 chmod +x tools/my-python-tool.py
 ```
 
-### 步骤2: 更新工具配置
+### Step 2: Update Tool Configuration
 
-编辑`tools/tools.json`，添加新工具：
+Edit `tools/tools.json` to add new tools:
 
 ```json
 {
@@ -304,9 +304,9 @@ chmod +x tools/my-python-tool.py
 }
 ```
 
-### 步骤3: 添加依赖配置
+### Step 3: Add Dependency Configuration
 
-编辑`tools/dependencies.json`，添加新依赖：
+Edit `tools/dependencies.json` to add new dependencies:
 
 ```json
 {
@@ -331,55 +331,55 @@ chmod +x tools/my-python-tool.py
 }
 ```
 
-### 步骤4: 创建工具文档
+### Step 4: Create Tool Documentation
 
-在`docs/tools/`目录创建工具文档：
+Create tool documentation in the `docs/tools/` directory:
 
 ```markdown
 # My Deployment Tool
 
-部署工具，支持应用部署和状态检查。
+Deployment tool that supports application deployment and status checking.
 
-## 使用方法
+## Usage
 
-### 部署应用
+### Deploy Application
 ```bash
 opskit my-tool deploy myapp production
 opskit my-tool deploy myapp staging --dry-run
 ```
 
-### 检查状态
+### Check Status
 ```bash
 opskit my-tool status myapp
 ```
 
-## 功能特点
-- 支持多环境部署
-- 提供干运行模式
-- 自动状态检查
+## Features
+- Support for multi-environment deployment
+- Dry-run mode available
+- Automatic status checking
 
-## 依赖要求
+## Dependencies
 - Docker
 - Kubectl
 ```
 
-### 步骤5: 测试工具
+### Step 5: Test Tool
 
 ```bash
-# 构建项目
+# Build project
 ./build.sh
 
-# 测试工具列表
+# Test tool list
 ./opskit list
 
-# 测试新工具
+# Test new tool
 ./opskit my-tool --help
 ./opskit my-tool deploy --help
 ```
 
-## 工具类型支持
+## Tool Type Support
 
-### Shell脚本 (type: "shell")
+### Shell Script (type: "shell")
 
 ```bash
 #!/bin/bash
@@ -390,19 +390,19 @@ shift
 
 case "$command" in
     "action1")
-        echo "执行动作1: $@"
+        echo "Execute action 1: $@"
         ;;
     "action2")
-        echo "执行动作2: $@"
+        echo "Execute action 2: $@"
         ;;
     *)
-        echo "未知命令: $command"
+        echo "Unknown command: $command"
         exit 1
         ;;
 esac
 ```
 
-### Python脚本 (type: "python")
+### Python Script (type: "python")
 
 ```python
 #!/usr/bin/env python3
@@ -413,7 +413,7 @@ def main():
     parser = argparse.ArgumentParser(description='Python Tool')
     subparsers = parser.add_subparsers(dest='command')
     
-    # 定义子命令
+    # Define subcommands
     action1_parser = subparsers.add_parser('action1')
     action1_parser.add_argument('param1', help='Parameter 1')
     
@@ -423,9 +423,9 @@ def main():
     args = parser.parse_args()
     
     if args.command == 'action1':
-        print(f"执行动作1: {args.param1}")
+        print(f"Execute action 1: {args.param1}")
     elif args.command == 'action2':
-        print(f"执行动作2: flag={args.flag}")
+        print(f"Execute action 2: flag={args.flag}")
     else:
         parser.print_help()
         sys.exit(1)
@@ -434,7 +434,7 @@ if __name__ == '__main__':
     main()
 ```
 
-### Go程序 (type: "go")
+### Go Program (type: "go")
 
 ```go
 package main
@@ -455,53 +455,53 @@ func main() {
     
     switch command {
     case "action1":
-        fmt.Printf("执行动作1: %v\n", args)
+        fmt.Printf("Execute action 1: %v\n", args)
     case "action2":
-        fmt.Printf("执行动作2: %v\n", args)
+        fmt.Printf("Execute action 2: %v\n", args)
     default:
-        fmt.Printf("未知命令: %s\n", command)
+        fmt.Printf("Unknown command: %s\n", command)
         os.Exit(1)
     }
 }
 ```
 
-### 二进制文件 (type: "binary")
+### Binary File (type: "binary")
 
-直接执行预编译的二进制文件，不需要脚本包装。
+Direct execution of precompiled binary files without script wrapping.
 
-## 测试
+## Testing
 
-### 单元测试
+### Unit Tests
 
 ```bash
-# 运行所有测试
+# Run all tests
 go test ./... -v
 
-# 运行特定包的测试
+# Run specific package tests
 go test ./internal/config -v
 go test ./internal/executor -v
 go test ./internal/dynamic -v
 
-# 运行覆盖率测试
+# Run coverage tests
 go test ./... -cover
 ```
 
-### 集成测试
+### Integration Tests
 
 ```bash
-# 构建项目
+# Build project
 ./build.sh
 
-# 测试基本功能
+# Test basic functionality
 ./opskit --help
 ./opskit list
 ./opskit --version-info
 
-# 测试工具执行
+# Test tool execution
 ./opskit test-python test --verbose
 ```
 
-### 编写测试用例
+### Writing Test Cases
 
 ```go
 func TestToolExecution(t *testing.T) {
@@ -520,46 +520,46 @@ func TestToolExecution(t *testing.T) {
 }
 ```
 
-## 构建和发布
+## Build and Release
 
-### 本地构建
+### Local Build
 
 ```bash
-# 构建当前平台
+# Build current platform
 ./build.sh
 
-# 构建所有平台
+# Build all platforms
 ./build.sh --all
 
-# 构建特定平台
+# Build specific platform
 GOOS=linux GOARCH=amd64 go build -o opskit-linux-amd64
 GOOS=darwin GOARCH=amd64 go build -o opskit-darwin-amd64
 GOOS=windows GOARCH=amd64 go build -o opskit-windows-amd64.exe
 ```
 
-### 版本发布
+### Version Release
 
 ```bash
-# 创建版本标签
+# Create version tag
 git tag -a v1.0.0 -m "Release version 1.0.0"
 git push origin v1.0.0
 
-# GitHub Actions会自动构建和发布
+# GitHub Actions will automatically build and release
 ```
 
-## 调试
+## Debugging
 
-### 启用调试模式
+### Enable Debug Mode
 
 ```bash
-# 环境变量
+# Environment variable
 export OPSKIT_DEBUG=1
 
-# 命令行标志
+# Command line flag
 ./opskit --debug list
 ```
 
-### 添加调试日志
+### Add Debug Logs
 
 ```go
 import "github.com/monlor/opskit/internal/logger"
@@ -572,121 +572,121 @@ func myFunction() {
 }
 ```
 
-## 贡献指南
+## Contribution Guidelines
 
-### 代码风格
+### Code Style
 
-1. **Go代码风格**
-   - 使用`go fmt`格式化代码
-   - 使用`go vet`检查代码
-   - 遵循Go官方编码规范
+1. **Go Code Style**
+   - Use `go fmt` to format code
+   - Use `go vet` to check code
+   - Follow Go official coding standards
 
-2. **Shell脚本风格**
-   - 使用`#!/bin/bash`作为shebang
-   - 设置`set -euo pipefail`
-   - 使用双引号包围变量
+2. **Shell Script Style**
+   - Use `#!/bin/bash` as shebang
+   - Set `set -euo pipefail`
+   - Use double quotes for variables
 
-3. **Python脚本风格**
-   - 使用`#!/usr/bin/env python3`
-   - 遵循PEP 8规范
-   - 使用type hints
+3. **Python Script Style**
+   - Use `#!/usr/bin/env python3`
+   - Follow PEP 8 standards
+   - Use type hints
 
-### 提交规范
+### Commit Standards
 
 ```bash
-# 提交格式
+# Commit format
 git commit -m "type(scope): description"
 
-# 类型说明
-feat:     新功能
-fix:      bug修复
-docs:     文档更新
-style:    代码格式化
-refactor: 代码重构
-test:     测试相关
-chore:    构建过程或辅助工具的变动
+# Type descriptions
+feat:     New feature
+fix:      Bug fix
+docs:     Documentation update
+style:    Code formatting
+refactor: Code refactoring
+test:     Testing related
+chore:    Build process or auxiliary tool changes
 
-# 示例
+# Examples
 git commit -m "feat(tools): add deployment tool"
 git commit -m "fix(executor): handle python script errors"
 git commit -m "docs(readme): update installation instructions"
 ```
 
-### Pull Request流程
+### Pull Request Process
 
-1. **Fork仓库**
-2. **创建功能分支**
+1. **Fork repository**
+2. **Create feature branch**
    ```bash
    git checkout -b feature/new-tool
    ```
-3. **开发和测试**
-4. **提交代码**
-5. **创建Pull Request**
-6. **代码审查**
-7. **合并代码**
+3. **Develop and test**
+4. **Commit code**
+5. **Create Pull Request**
+6. **Code review**
+7. **Merge code**
 
-## 最佳实践
+## Best Practices
 
-### 工具开发
+### Tool Development
 
-1. **错误处理**
-   - 使用适当的退出码
-   - 提供有用的错误信息
-   - 优雅地处理中断信号
+1. **Error Handling**
+   - Use appropriate exit codes
+   - Provide useful error messages
+   - Gracefully handle interrupt signals
 
-2. **用户体验**
-   - 提供清晰的帮助信息
-   - 支持干运行模式
-   - 显示操作进度
+2. **User Experience**
+   - Provide clear help information
+   - Support dry-run mode
+   - Show operation progress
 
-3. **安全性**
-   - 验证输入参数
-   - 使用安全的临时文件
-   - 避免代码注入
+3. **Security**
+   - Validate input parameters
+   - Use secure temporary files
+   - Avoid code injection
 
-### 性能优化
+### Performance Optimization
 
-1. **资源管理**
-   - 及时释放资源
-   - 使用连接池
-   - 避免内存泄漏
+1. **Resource Management**
+   - Release resources promptly
+   - Use connection pools
+   - Avoid memory leaks
 
-2. **并发处理**
-   - 使用goroutine处理并发
-   - 合理使用channel
-   - 避免竞态条件
+2. **Concurrent Processing**
+   - Use goroutines for concurrency
+   - Use channels appropriately
+   - Avoid race conditions
 
-## 发布周期
+## Release Cycle
 
-### 版本策略
+### Version Strategy
 
-- **主版本** (v1.0.0): 重大功能更新或不兼容变更
-- **次版本** (v1.1.0): 新功能添加
-- **补丁版本** (v1.1.1): Bug修复
+- **Major version** (v1.0.0): Major feature updates or breaking changes
+- **Minor version** (v1.1.0): New feature additions
+- **Patch version** (v1.1.1): Bug fixes
 
-### 发布流程
+### Release Process
 
-1. **功能开发和测试**
-2. **更新文档**
-3. **创建发布候选版本**
-4. **测试和验证**
-5. **创建正式版本**
-6. **发布到GitHub Releases**
+1. **Feature development and testing**
+2. **Update documentation**
+3. **Create release candidate**
+4. **Test and validate**
+5. **Create official release**
+6. **Publish to GitHub Releases**
 
-## 社区
+## Community
 
-### 获取帮助
+### Getting Help
 
-- 📖 [文档](https://github.com/monlor/opskit/wiki)
-- 💬 [讨论](https://github.com/monlor/opskit/discussions)
-- 🐛 [问题反馈](https://github.com/monlor/opskit/issues)
+- 📖 [Documentation](https://github.com/monlor/opskit/wiki)
+- 💬 [Discussions](https://github.com/monlor/opskit/discussions)
+- 🐛 [Issue Reports](https://github.com/monlor/opskit/issues)
 
-### 贡献方式
+### Contribution Methods
 
-- 报告bug
-- 提出功能建议
-- 贡献代码
-- 改进文档
-- 分享使用经验
+- Report bugs
+- Propose feature suggestions
+- Contribute code
+- Improve documentation
+- Share usage experience
 
-欢迎加入OpsKit社区，一起构建更好的运维工具！
+Welcome to the OpsKit community, let's build better operational tools together!

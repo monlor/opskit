@@ -1,103 +1,103 @@
 # MySQL Database Sync
 
-MySQL数据库同步工具，支持数据库间完整同步，提供连接测试和安全确认机制。
+MySQL database synchronization tool that supports complete database synchronization between MySQL databases, provides connection testing, and safety confirmation mechanisms.
 
-## 功能概述
+## Feature Overview
 
-- 支持MySQL数据库之间的完整同步
-- 自动检测和安装mysql客户端
-- 连接测试确保数据库可用性
-- 详细的源库和目标库信息展示
-- 安全机制：同步前显示详细信息并要求确认
-- 数据保护：明确警告会覆盖目标数据库
+- Supports complete synchronization between MySQL databases
+- Automatic detection and installation of mysql client
+- Connection testing to ensure database availability
+- Detailed display of source and target database information
+- Safety mechanism: displays detailed information and requires confirmation before synchronization
+- Data protection: explicitly warns that the target database will be overwritten
 
-## 使用方法
+## Usage
 
-### 基本语法
+### Basic Syntax
 
 ```bash
 opskit mysql-sync <command> [args] [flags]
 ```
 
-### 可用命令
+### Available Commands
 
-#### sync - 同步数据库
+#### sync - Synchronize databases
 
-同步源数据库到目标数据库。
+Synchronizes the source database to the target database.
 
 ```bash
 opskit mysql-sync sync <source> <target> [flags]
 ```
 
-**参数:**
-- `source` - 源数据库连接字符串 (必需)
-- `target` - 目标数据库连接字符串 (必需)
+**Parameters:**
+- `source` - Source database connection string (required)
+- `target` - Target database connection string (required)
 
-**连接字符串格式:**
+**Connection string format:**
 ```
 user:password@host:port/database
 ```
 
-**标志:**
-- `--dry-run, -n` - 显示将要执行的操作，但不实际执行
-- `--force, -f` - 强制同步，无需确认
+**Flags:**
+- `--dry-run, -n` - Show what will be executed without actually running
+- `--force, -f` - Force synchronization without confirmation
 
-**示例:**
+**Examples:**
 ```bash
-# 基本同步
+# Basic synchronization
 opskit mysql-sync sync user:pass@source-host:3306/source_db user:pass@target-host:3306/target_db
 
-# 干运行模式
+# Dry run mode
 opskit mysql-sync sync user:pass@source-host:3306/source_db user:pass@target-host:3306/target_db --dry-run
 
-# 强制同步（跳过确认）
+# Force sync (skip confirmation)
 opskit mysql-sync sync user:pass@source-host:3306/source_db user:pass@target-host:3306/target_db --force
 ```
 
-#### check - 测试数据库连接
+#### check - Test database connection
 
-测试数据库连接是否可用。
+Tests whether a database connection is available.
 
 ```bash
 opskit mysql-sync check <connection>
 ```
 
-**参数:**
-- `connection` - 要测试的数据库连接字符串 (必需)
+**Parameters:**
+- `connection` - Database connection string to test (required)
 
-**示例:**
+**Examples:**
 ```bash
-# 测试数据库连接
+# Test database connection
 opskit mysql-sync check user:pass@host:3306/database
 ```
 
-## 功能特点
+## Features
 
-### 同步机制
-- 使用mysqldump进行数据导出
-- 支持存储过程和触发器
-- 事务一致性保证
-- 临时文件自动清理
+### Synchronization Mechanism
+- Uses mysqldump for data export
+- Supports stored procedures and triggers
+- Transaction consistency guarantee
+- Automatic cleanup of temporary files
 
-### 安全特性
-1. **连接验证**: 同步前验证源库和目标库连接
-2. **信息展示**: 详细显示源库和目标库信息
-3. **确认机制**: 危险操作前要求输入"CONFIRM"确认
-4. **数据保护**: 明确警告会覆盖目标数据库数据
+### Security Features
+1. **Connection validation**: Validates source and target database connections before synchronization
+2. **Information display**: Detailed display of source and target database information
+3. **Confirmation mechanism**: Requires input of "CONFIRM" before dangerous operations
+4. **Data protection**: Explicitly warns that target database data will be lost
 
-### 错误处理
-- 连接失败时提供详细错误信息
-- 同步过程中的错误会回滚操作
-- 临时文件自动清理，不留垃圾文件
+### Error Handling
+- Provides detailed error information when connection fails
+- Errors during synchronization will rollback operations
+- Automatic cleanup of temporary files, leaving no garbage files
 
-## 依赖要求
+## Dependencies
 
-### 必需依赖
-- `mysql-client` - MySQL命令行客户端
-- `mysqldump` - 数据导出工具（通常随mysql-client安装）
+### Required Dependencies
+- `mysql-client` - MySQL command line client
+- `mysqldump` - Data export tool (usually installed with mysql-client)
 
-### 自动安装
-工具会自动检测依赖并提供安装选项：
+### Automatic Installation
+The tool will automatically detect dependencies and provide installation options:
 
 **macOS (Homebrew):**
 ```bash
@@ -114,27 +114,27 @@ sudo apt-get install mysql-client
 sudo yum install mysql
 ```
 
-## 使用示例
+## Usage Examples
 
-### 完整同步流程
+### Complete Synchronization Workflow
 
 ```bash
-# 1. 测试源数据库连接
+# 1. Test source database connection
 opskit mysql-sync check admin:password@source-db.example.com:3306/production
 
-# 2. 测试目标数据库连接
+# 2. Test target database connection
 opskit mysql-sync check admin:password@target-db.example.com:3306/staging
 
-# 3. 执行干运行，查看将要执行的操作
+# 3. Perform dry run to see what will be executed
 opskit mysql-sync sync admin:password@source-db.example.com:3306/production admin:password@target-db.example.com:3306/staging --dry-run
 
-# 4. 执行实际同步
+# 4. Execute actual synchronization
 opskit mysql-sync sync admin:password@source-db.example.com:3306/production admin:password@target-db.example.com:3306/staging
 ```
 
-### 交互式确认流程
+### Interactive Confirmation Process
 
-当执行同步时，工具会显示以下信息并要求确认：
+When executing synchronization, the tool will display the following information and require confirmation:
 
 ```
 === MySQL Database Sync ===
@@ -161,88 +161,88 @@ Target Database:
 Type 'CONFIRM' to proceed: 
 ```
 
-## 故障排除
+## Troubleshooting
 
-### 常见问题
+### Common Issues
 
-1. **连接失败**
+1. **Connection failed**
    ```
    Error: Can't connect to MySQL server on 'host'
    ```
-   - 检查主机名和端口是否正确
-   - 验证网络连接
-   - 确认防火墙设置
+   - Check if hostname and port are correct
+   - Verify network connectivity
+   - Confirm firewall settings
 
-2. **认证失败**
+2. **Authentication failed**
    ```
    Error: Access denied for user 'username'@'host'
    ```
-   - 检查用户名和密码
-   - 确认用户有相应权限
-   - 检查MySQL用户主机限制
+   - Check username and password
+   - Confirm user has appropriate permissions
+   - Check MySQL user host restrictions
 
-3. **权限不足**
+3. **Insufficient permissions**
    ```
    Error: Access denied; you need SELECT privileges
    ```
-   - 源库用户需要SELECT权限
-   - 目标库用户需要DROP、CREATE、INSERT权限
+   - Source database user needs SELECT permissions
+   - Target database user needs DROP, CREATE, INSERT permissions
 
-4. **磁盘空间不足**
+4. **Insufficient disk space**
    ```
    Error: No space left on device
    ```
-   - 检查临时目录磁盘空间
-   - 清理不必要的文件
-   - 使用较大的临时目录
+   - Check temporary directory disk space
+   - Clean up unnecessary files
+   - Use larger temporary directory
 
-### 调试模式
+### Debug Mode
 
-启用调试模式查看详细日志：
+Enable debug mode to view detailed logs:
 
 ```bash
 export OPSKIT_DEBUG=1
 opskit mysql-sync sync source target --dry-run
 ```
 
-## 最佳实践
+## Best Practices
 
-1. **备份原则**
-   - 同步前备份目标数据库
-   - 在测试环境先验证同步流程
+1. **Backup principle**
+   - Backup target database before synchronization
+   - Test synchronization process in testing environment first
 
-2. **权限管理**
-   - 使用最小权限原则
-   - 为同步操作创建专用用户
+2. **Permission management**
+   - Use minimum privilege principle
+   - Create dedicated users for synchronization operations
 
-3. **网络优化**
-   - 在网络良好的环境执行同步
-   - 大数据库考虑分批同步
+3. **Network optimization**
+   - Execute synchronization in good network environment
+   - Consider batch synchronization for large databases
 
-4. **监控告警**
-   - 设置同步操作监控
-   - 建立同步失败告警机制
+4. **Monitoring and alerts**
+   - Set up monitoring for synchronization operations
+   - Establish alert mechanism for synchronization failures
 
-## 安全注意事项
+## Security Considerations
 
-1. **数据保护**
-   - ⚠️ 同步操作会完全覆盖目标数据库
-   - 确保在正确的目标数据库上执行操作
-   - 重要数据务必提前备份
+1. **Data protection**
+   - ⚠️ Synchronization operations will completely overwrite the target database
+   - Ensure operations are performed on the correct target database
+   - Important data must be backed up in advance
 
-2. **凭证安全**
-   - 避免在命令行中明文传递密码
-   - 使用配置文件或环境变量存储敏感信息
-   - 定期更换数据库密码
+2. **Credential security**
+   - Avoid passing passwords in plaintext on command line
+   - Use configuration files or environment variables to store sensitive information
+   - Regularly change database passwords
 
-3. **网络安全**
-   - 使用SSL连接保护数据传输
-   - 限制数据库访问的网络范围
-   - 监控异常的数据库连接
+3. **Network security**
+   - Use SSL connections to protect data transmission
+   - Limit database access network range
+   - Monitor abnormal database connections
 
-## 配置文件
+## Configuration File
 
-可以使用配置文件避免在命令行中传递敏感信息：
+You can use configuration files to avoid passing sensitive information in command line:
 
 ```bash
 # ~/.opskit/mysql-sync.conf
@@ -261,7 +261,7 @@ password=secret_password
 database=staging
 ```
 
-然后使用：
+Then use:
 ```bash
 opskit mysql-sync sync --config ~/.opskit/mysql-sync.conf
 ```

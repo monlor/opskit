@@ -1,0 +1,167 @@
+{
+  "version": "1.0.0",
+  "tools": [
+    {
+      "id": "mysql-sync",
+      "name": "MySQL Database Sync",
+      "description": "Synchronize MySQL databases with safety checks",
+      "file": "mysql-sync.sh",
+      "type": "shell",
+      "dependencies": ["mysql"],
+      "category": "database",
+      "version": "1.0.0",
+      "commands": [
+        {
+          "name": "sync",
+          "description": "Synchronize databases",
+          "args": [
+            {
+              "name": "source",
+              "description": "Source database connection string",
+              "required": true
+            },
+            {
+              "name": "target", 
+              "description": "Target database connection string",
+              "required": true
+            }
+          ],
+          "flags": [
+            {
+              "name": "dry-run",
+              "short": "n",
+              "description": "Show what would be done without executing",
+              "type": "bool"
+            },
+            {
+              "name": "force",
+              "short": "f",
+              "description": "Force synchronization without confirmation",
+              "type": "bool"
+            }
+          ]
+        },
+        {
+          "name": "check",
+          "description": "Test database connections",
+          "args": [
+            {
+              "name": "connection",
+              "description": "Database connection string to test",
+              "required": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "s3-sync",
+      "name": "S3 Storage Sync", 
+      "description": "Synchronize files with Amazon S3",
+      "file": "s3-sync.sh",
+      "type": "shell",
+      "dependencies": ["awscli"],
+      "category": "storage",
+      "version": "1.0.0",
+      "commands": [
+        {
+          "name": "upload",
+          "description": "Upload files to S3",
+          "args": [
+            {
+              "name": "source",
+              "description": "Source directory or file",
+              "required": true
+            },
+            {
+              "name": "target",
+              "description": "S3 bucket and path (s3://bucket/path)",
+              "required": true
+            }
+          ],
+          "flags": [
+            {
+              "name": "dry-run",
+              "short": "n", 
+              "description": "Show what would be done without executing",
+              "type": "bool"
+            },
+            {
+              "name": "exclude",
+              "short": "e",
+              "description": "Exclude pattern",
+              "type": "string"
+            }
+          ]
+        },
+        {
+          "name": "download",
+          "description": "Download files from S3",
+          "args": [
+            {
+              "name": "source",
+              "description": "S3 bucket and path (s3://bucket/path)",
+              "required": true
+            },
+            {
+              "name": "target",
+              "description": "Target directory",
+              "required": true
+            }
+          ],
+          "flags": [
+            {
+              "name": "dry-run",
+              "short": "n",
+              "description": "Show what would be done without executing", 
+              "type": "bool"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "test-python",
+      "name": "Test Python Tool",
+      "description": "A test tool written in Python",
+      "file": "test-python.py",
+      "type": "python",
+      "dependencies": ["python3"],
+      "category": "testing",
+      "version": "1.0.0",
+      "commands": [
+        {
+          "name": "test",
+          "description": "Run a simple test",
+          "flags": [
+            {
+              "name": "verbose",
+              "short": "V",
+              "description": "Enable verbose output",
+              "type": "bool"
+            }
+          ]
+        },
+        {
+          "name": "process",
+          "description": "Process some data",
+          "args": [
+            {
+              "name": "input",
+              "description": "Input data to process",
+              "required": true
+            }
+          ],
+          "flags": [
+            {
+              "name": "dry-run",
+              "short": "n",
+              "description": "Show what would be done without executing",
+              "type": "bool"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(chmod:*)",
+      "Bash(mkdir:*)",
+      "Bash(find:*)",
+      "Bash(./build.sh:*)",
+      "Bash(./opskit --help)",
+      "Bash(./opskit --version-info)",
+      "Bash(./opskit list:*)",
+      "Bash(./opskit run:*)",
+      "Bash(go build:*)",
+      "Bash(go test:*)"
+    ],
+    "deny": []
+  }
+}

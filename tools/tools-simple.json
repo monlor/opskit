@@ -1,0 +1,29 @@
+{
+  "version": "1.0.0",
+  "tools": [
+    {
+      "id": "test-python",
+      "name": "Test Python Tool",
+      "description": "A test tool written in Python",
+      "file": "test-python.py",
+      "type": "python",
+      "dependencies": ["python3"],
+      "category": "testing",
+      "version": "1.0.0",
+      "commands": [
+        {
+          "name": "test",
+          "description": "Run a simple test",
+          "flags": [
+            {
+              "name": "verbose",
+              "short": "V",
+              "description": "Enable verbose output",
+              "type": "bool"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

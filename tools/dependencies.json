@@ -1,0 +1,59 @@
+{
+  "version": "1.0.0",
+  "dependencies": {
+    "curl": {
+      "description": "Command line tool for transferring data",
+      "check": "curl",
+      "package": "curl",
+      "docs": "https://curl.se/docs/"
+    },
+    "jq": {
+      "description": "JSON processor for shell scripts", 
+      "check": "jq",
+      "package": "jq",
+      "docs": "https://stedolan.github.io/jq/"
+    },
+    "git": {
+      "description": "Distributed version control system",
+      "check": "git", 
+      "package": "git",
+      "docs": "https://git-scm.com/docs"
+    },
+    "mysql": {
+      "description": "MySQL command line client",
+      "check": "mysql",
+      "packages": {
+        "brew": "mysql-client",
+        "apt": "mysql-client",
+        "yum": "mysql",
+        "dnf": "mysql",
+        "pacman": "mysql-clients",
+        "zypper": "mysql-client"
+      },
+      "docs": "https://dev.mysql.com/doc/refman/8.0/en/mysql.html"
+    },
+    "mysqldump": {
+      "description": "MySQL database backup utility",
+      "check": "mysqldump",
+      "packages": {
+        "brew": "mysql-client",
+        "apt": "mysql-client", 
+        "yum": "mysql",
+        "dnf": "mysql",
+        "pacman": "mysql-clients",
+        "zypper": "mysql-client"
+      },
+      "docs": "https://dev.mysql.com/doc/refman/8.0/en/mysqldump.html"
+    },
+    "awscli": {
+      "description": "AWS Command Line Interface",
+      "check": "aws",
+      "packages": {
+        "pacman": "aws-cli",
+        "zypper": "aws-cli"
+      },
+      "package": "awscli",
+      "docs": "https://docs.aws.amazon.com/cli/"
+    }
+  }
+}

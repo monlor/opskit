@@ -10,7 +10,10 @@
       "Bash(./opskit list:*)",
       "Bash(./opskit run:*)",
       "Bash(go build:*)",
-      "Bash(go test:*)"
+      "Bash(go test:*)",
+      "Bash(./opskit k8s-export:*)",
+      "Bash(timeout:*)",
+      "Bash(go get:*)"
     ],
     "deny": []
   }

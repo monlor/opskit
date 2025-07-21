@@ -37,6 +37,7 @@ type Tool struct {
 	Type         string      `json:"type"`        // "shell", "python", "go", "binary"
 	Dependencies []string    `json:"dependencies"`
 	Category     string      `json:"category"`
+	Group        string      `json:"group"`       // Group for display organization
 	Version      string      `json:"version"`
 	Commands     []Command   `json:"commands"`   // Sub-commands
 	Args         []Argument  `json:"args"`       // Global arguments

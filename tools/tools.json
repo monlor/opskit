@@ -9,6 +9,7 @@
       "type": "shell",
       "dependencies": ["mysql"],
       "category": "database",
+      "group": "database",
       "version": "1.0.0",
       "commands": [
         {
@@ -62,6 +63,7 @@
       "type": "shell",
       "dependencies": ["awscli"],
       "category": "storage",
+      "group": "cloud",
       "version": "1.0.0",
       "commands": [
         {
@@ -128,6 +130,7 @@
       "type": "python",
       "dependencies": ["python3"],
       "category": "testing",
+      "group": "development",
       "version": "1.0.0",
       "commands": [
         {
@@ -160,6 +163,145 @@
               "type": "bool"
             }
           ]
+        }
+      ]
+    },
+    {
+      "id": "k8s-export",
+      "name": "Kubernetes Resource Export",
+      "description": "Export Kubernetes resources including Helm and non-Helm managed resources",
+      "file": "k8s-export.sh",
+      "type": "shell",
+      "dependencies": ["kubectl", "helm", "yq", "jq"],
+      "category": "kubernetes",
+      "group": "kubernetes",
+      "version": "1.0.0",
+      "commands": [
+        {
+          "name": "export",
+          "description": "Export all resources (Helm and non-Helm)",
+          "flags": [
+            {
+              "name": "namespace",
+              "short": "n",
+              "description": "Target namespace (default: current context namespace)",
+              "type": "string"
+            },
+            {
+              "name": "output-dir",
+              "short": "o",
+              "description": "Export directory (default: $HOME/Downloads)",
+              "type": "string"
+            },
+            {
+              "name": "dry-run",
+              "description": "Show what would be exported without actually exporting",
+              "type": "bool"
+            },
+            {
+              "name": "exclude-helm",
+              "description": "Regex pattern to exclude Helm releases",
+              "type": "string"
+            },
+            {
+              "name": "exclude-k8s",
+              "description": "Regex pattern to exclude K8s resources",
+              "type": "string"
+            },
+            {
+              "name": "all-namespaces",
+              "short": "A",
+              "description": "Export from all namespaces",
+              "type": "bool"
+            },
+            {
+              "name": "non-interactive",
+              "description": "Run in non-interactive mode",
+              "type": "bool"
+            }
+          ]
+        },
+        {
+          "name": "helm-only",
+          "description": "Export only Helm resources",
+          "flags": [
+            {
+              "name": "namespace",
+              "short": "n",
+              "description": "Target namespace (default: current context namespace)",
+              "type": "string"
+            },
+            {
+              "name": "output-dir",
+              "short": "o",
+              "description": "Export directory (default: $HOME/Downloads)",
+              "type": "string"
+            },
+            {
+              "name": "dry-run",
+              "description": "Show what would be exported without actually exporting",
+              "type": "bool"
+            },
+            {
+              "name": "exclude-helm",
+              "description": "Regex pattern to exclude Helm releases",
+              "type": "string"
+            },
+            {
+              "name": "all-namespaces",
+              "short": "A",
+              "description": "Export from all namespaces",
+              "type": "bool"
+            },
+            {
+              "name": "non-interactive",
+              "description": "Run in non-interactive mode",
+              "type": "bool"
+            }
+          ]
+        },
+        {
+          "name": "resources-only",
+          "description": "Export only non-Helm resources",
+          "flags": [
+            {
+              "name": "namespace",
+              "short": "n",
+              "description": "Target namespace (default: current context namespace)",
+              "type": "string"
+            },
+            {
+              "name": "output-dir",
+              "short": "o",
+              "description": "Export directory (default: $HOME/Downloads)",
+              "type": "string"
+            },
+            {
+              "name": "dry-run",
+              "description": "Show what would be exported without actually exporting",
+              "type": "bool"
+            },
+            {
+              "name": "exclude-k8s",
+              "description": "Regex pattern to exclude K8s resources",
+              "type": "string"
+            },
+            {
+              "name": "all-namespaces",
+              "short": "A",
+              "description": "Export from all namespaces",
+              "type": "bool"
+            },
+            {
+              "name": "non-interactive",
+              "description": "Run in non-interactive mode",
+              "type": "bool"
+            }
+          ]
+        },
+        {
+          "name": "check",
+          "description": "Check prerequisites and configuration"
         }
       ]
     }

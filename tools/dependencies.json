@@ -54,6 +54,58 @@
       },
       "package": "awscli",
       "docs": "https://docs.aws.amazon.com/cli/"
+    },
+    "kubectl": {
+      "description": "Kubernetes command-line tool",
+      "check": "kubectl",
+      "packages": {
+        "brew": "kubectl",
+        "apt": "kubectl",
+        "yum": "kubectl",
+        "dnf": "kubectl",
+        "pacman": "kubectl",
+        "zypper": "kubernetes-client"
+      },
+      "docs": "https://kubernetes.io/docs/reference/kubectl/"
+    },
+    "helm": {
+      "description": "Kubernetes package manager",
+      "check": "helm",
+      "packages": {
+        "brew": "helm",
+        "apt": "helm",
+        "yum": "helm",
+        "dnf": "helm",
+        "pacman": "helm",
+        "zypper": "helm"
+      },
+      "docs": "https://helm.sh/docs/"
+    },
+    "yq": {
+      "description": "YAML processor for command line",
+      "check": "yq",
+      "packages": {
+        "brew": "yq",
+        "apt": "yq",
+        "yum": "yq",
+        "dnf": "yq",
+        "pacman": "go-yq",
+        "zypper": "yq"
+      },
+      "docs": "https://mikefarah.gitbook.io/yq/"
+    },
+    "python3": {
+      "description": "Python 3 interpreter",
+      "check": "python3",
+      "packages": {
+        "brew": "python@3.9",
+        "apt": "python3",
+        "yum": "python3",
+        "dnf": "python3",
+        "pacman": "python",
+        "zypper": "python3"
+      },
+      "docs": "https://docs.python.org/3/"
     }
   }
 }

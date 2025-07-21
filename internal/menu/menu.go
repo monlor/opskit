@@ -80,19 +80,23 @@ func RunInteractiveMenu(cfg *config.Config) error {
 func createMenuItems(tools []config.Tool) []MenuItem {
 	var items []MenuItem
 	
-	// Group tools by category
-	categories := make(map[string][]config.Tool)
+	// Group tools by group field (fallback to category if group is empty)
+	groups := make(map[string][]config.Tool)
 	for _, tool := range tools {
-		categories[tool.Category] = append(categories[tool.Category], tool)
+		groupName := tool.Group
+		if groupName == "" {
+			groupName = tool.Category
+		}
+		groups[groupName] = append(groups[groupName], tool)
 	}
 	
-	// Create menu items
-	for category, categoryTools := range categories {
-		for _, tool := range categoryTools {
+	// Create menu items grouped by group
+	for groupName, groupTools := range groups {
+		for _, tool := range groupTools {
 			items = append(items, MenuItem{
 				ID:          tool.ID,
 				Name:        tool.Name,
-				Description: fmt.Sprintf("[%s] %s", strings.ToUpper(category), tool.Description),
+				Description: fmt.Sprintf("[%s] %s", strings.ToUpper(groupName), tool.Description),
 				Tool:        &tool,
 			})
 		}
@@ -103,13 +107,19 @@ func createMenuItems(tools []config.Tool) []MenuItem {
 
 // showMainMenu displays the main menu and returns selected item
 func showMainMenu(items []MenuItem) (*MenuItem, error) {
-	// Create menu options
-	options := make([]string, 0, len(items)+1)
-	for i, item := range items {
-		options = append(options, fmt.Sprintf("%d. %s", i+1, item.Name))
+	// Use fuzzy selector for better user experience
+	selected, err := ShowFuzzyMenu(items)
+	if err != nil {
+		logger.Error("Failed to show fuzzy menu: %v", err)
+		// Fallback to simple menu
+		return showSimpleMenu(items)
 	}
-	options = append(options, "q. Quit")
 	
+	return selected, nil
+}
+
+// showSimpleMenu is a fallback simple menu (original implementation)
+func showSimpleMenu(items []MenuItem) (*MenuItem, error) {
 	// Show menu
 	fmt.Printf("\n" + strings.Repeat("=", 60) + "\n")
 	fmt.Printf("OpsKit - Remote Operations Toolkit\n")
@@ -123,15 +133,20 @@ func showMainMenu(items []MenuItem) (*MenuItem, error) {
 	
 	// Get user input
 	prompt := promptui.Prompt{
-		Label: "Select a tool (1-" + strconv.Itoa(len(items)) + " or q to quit)",
+		Label: "Select a tool (1-" + strconv.Itoa(len(items)) + ", tool-id to filter, or q to quit)",
 		Validate: func(input string) error {
 			if input == "q" || input == "Q" {
 				return nil
 			}
 			
+			// Check if input is a tool ID (contains letters)
+			if containsLetters(input) {
+				return nil // Allow tool ID filtering
+			}
+			
 			num, err := strconv.Atoi(input)
 			if err != nil {
-				return fmt.Errorf("invalid input: please enter a number or 'q'")
+				return fmt.Errorf("invalid input: please enter a number, tool ID, or 'q'")
 			}
 			
 			if num < 1 || num > len(items) {
@@ -152,7 +167,21 @@ func showMainMenu(items []MenuItem) (*MenuItem, error) {
 		return nil, nil
 	}
 	
-	// Get selected item
+	// Check if input is a tool ID filter
+	if containsLetters(result) {
+		filteredItems := filterToolsByID(items, result)
+		if len(filteredItems) == 0 {
+			fmt.Printf("No tools found matching '%s'\n", result)
+			return showSimpleMenu(items) // Show main menu again
+		}
+		if len(filteredItems) == 1 {
+			return &filteredItems[0], nil // Direct match
+		}
+		// Multiple matches, show filtered menu
+		return showSimpleMenu(filteredItems)
+	}
+	
+	// Get selected item by number
 	num, _ := strconv.Atoi(result)
 	return &items[num-1], nil
 }
@@ -213,4 +242,28 @@ func confirmContinue() bool {
 	}
 	
 	return strings.ToLower(result) == "y"
+}
+
+// containsLetters checks if a string contains any letters
+func containsLetters(s string) bool {
+	for _, r := range s {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') {
+			return true
+		}
+	}
+	return false
+}
+
+// filterToolsByID filters tools by ID containing the given string
+func filterToolsByID(items []MenuItem, filter string) []MenuItem {
+	var filtered []MenuItem
+	filterLower := strings.ToLower(filter)
+	
+	for _, item := range items {
+		if strings.Contains(strings.ToLower(item.ID), filterLower) {
+			filtered = append(filtered, item)
+		}
+	}
+	
+	return filtered
 }

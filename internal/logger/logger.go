@@ -2,6 +2,7 @@ package logger
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"time"
 
@@ -67,4 +68,16 @@ func Debug(format string, args ...interface{}) {
 func Fatal(format string, args ...interface{}) {
 	Error(format, args...)
 	os.Exit(1)
+}
+
+// NullWriter is a writer that discards all data
+type NullWriter struct{}
+
+func (nw *NullWriter) Write(p []byte) (n int, err error) {
+	return len(p), nil
+}
+
+// GetLogOutput returns the current log output (os.Stderr for most cases)
+func GetLogOutput() io.Writer {
+	return os.Stderr
 }

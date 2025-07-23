@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"strconv"
 	"strings"
 
 	"github.com/manifoldco/promptui"
@@ -138,33 +137,9 @@ func createMenuItems(tools []config.Tool) []MenuItem {
 	return items
 }
 
-// MenuAction represents the action taken by user
-type MenuAction int
-
-const (
-	ActionSelect MenuAction = iota
-	ActionBack
-	ActionQuit
-)
-
-// MenuResult represents the result of a menu operation
-type MenuResult struct {
-	Action MenuAction
-	Item   *MenuItem
-}
-
-// showTwoLevelMenu displays unified search that includes both categories and tools
+// showTwoLevelMenu displays gocui-based interactive menu
 func showTwoLevelMenu(tools []config.Tool) (*MenuItem, error) {
-	// Create unified search items: categories + all tools
-	unifiedItems := createUnifiedSearchItems(tools)
-	
-	// Show unified search menu
-	selectedItem, err := showUnifiedSearchMenu(unifiedItems, tools)
-	if err != nil {
-		return nil, err
-	}
-	
-	return selectedItem, nil
+	return ShowGocuiMenu(tools)
 }
 
 // UnifiedSearchItem represents an item in the unified search
@@ -215,232 +190,13 @@ func createUnifiedSearchItems(tools []config.Tool) []UnifiedSearchItem {
 	return items
 }
 
-// showUnifiedSearchMenu displays the unified search interface
-func showUnifiedSearchMenu(items []UnifiedSearchItem, allTools []config.Tool) (*MenuItem, error) {
-	// Use fuzzy selector for unified search
-	selected, err := ShowUnifiedSearchMenu(items, "Search Categories and Tools")
-	if err != nil {
-		logger.Error("Failed to show unified search menu: %v", err)
-		// Fallback to simple unified menu
-		return showSimpleUnifiedMenu(items, allTools)
-	}
-	
-	if selected == nil {
-		return nil, nil // User quit
-	}
-	
-	// Handle selection based on type
-	if selected.Type == "category" {
-		// Show tools in selected category
-		categoryTools := createMenuItems(selected.Category.Tools)
-		return showCategoryToolsMenu(categoryTools, selected.Category.Name, allTools)
-	} else {
-		// Direct tool selection
-		return &MenuItem{
-			ID:          selected.Tool.ID,
-			Name:        selected.Tool.Name,
-			Description: selected.Tool.Description,
-			Tool:        selected.Tool,
-		}, nil
-	}
-}
 
-// showCategoryToolsMenu shows tools in a specific category with back navigation
-func showCategoryToolsMenu(tools []MenuItem, categoryName string, allTools []config.Tool) (*MenuItem, error) {
-	for {
-		selectedTool, action, err := showToolMenuWithAction(tools, categoryName)
-		if err != nil {
-			return nil, err
-		}
-		
-		switch action {
-		case ActionSelect:
-			return selectedTool, nil
-		case ActionBack:
-			// Go back to unified search
-			return showTwoLevelMenu(allTools)
-		case ActionQuit:
-			return nil, nil // User quit
-		}
-	}
-}
 
-// showCategoryMenu displays the category selection menu
-func showCategoryMenu(categories []CategoryItem) (*CategoryItem, error) {
-	// Convert categories to fuzzy menu items for selection
-	var menuItems []FuzzyMenuItem
-	for _, cat := range categories {
-		menuItems = append(menuItems, FuzzyMenuItem{
-			ID:          strings.ToLower(cat.Name),
-			Name:        cat.Name,
-			Description: cat.Description,
-			Group:       "category",
-			Score:       1.0,
-		})
-	}
-	
-	// Use fuzzy selector for categories
-	selected, err := ShowFuzzyCategoryMenu(menuItems, "Select Category")
-	if err != nil {
-		logger.Error("Failed to show category menu: %v", err)
-		// Fallback to simple category menu
-		return showSimpleCategoryMenu(categories)
-	}
-	
-	if selected == nil {
-		return nil, nil
-	}
-	
-	// Find the selected category
-	for _, cat := range categories {
-		if strings.ToLower(cat.Name) == selected.ID {
-			return &cat, nil
-		}
-	}
-	
-	return nil, fmt.Errorf("category not found")
-}
 
-// showToolMenu displays tools in a category
-func showToolMenu(tools []MenuItem, categoryName string) (*MenuItem, error) {
-	// Use fuzzy selector for tools
-	selected, err := ShowFuzzyToolMenu(tools, fmt.Sprintf("Select Tool in %s", categoryName))
-	if err != nil {
-		logger.Error("Failed to show tool menu: %v", err)
-		// Fallback to simple tool menu
-		return showSimpleToolMenu(tools, categoryName)
-	}
-	
-	return selected, nil
-}
 
-// showToolMenuWithAction displays tools in a category and returns the action taken
-func showToolMenuWithAction(tools []MenuItem, categoryName string) (*MenuItem, MenuAction, error) {
-	// Use fuzzy selector for tools
-	selected, action, err := ShowFuzzyToolMenuWithAction(tools, fmt.Sprintf("Select Tool in %s", categoryName))
-	if err != nil {
-		logger.Error("Failed to show tool menu: %v", err)
-		// Fallback to simple tool menu
-		return showSimpleToolMenuWithAction(tools, categoryName)
-	}
-	
-	return selected, action, nil
-}
 
-// showSimpleCategoryMenu is a fallback simple category menu
-func showSimpleCategoryMenu(categories []CategoryItem) (*CategoryItem, error) {
-	fmt.Printf("\n" + strings.Repeat("=", 60) + "\n")
-	fmt.Printf("OpsKit - Select Category\n")
-	fmt.Printf(strings.Repeat("=", 60) + "\n\n")
-	
-	fmt.Printf("Available Categories:\n\n")
-	for i, cat := range categories {
-		fmt.Printf("%d. %s\n", i+1, cat.Name)
-		fmt.Printf("   %s\n\n", cat.Description)
-	}
-	
-	// Get user input
-	prompt := promptui.Prompt{
-		Label: "Select a category (1-" + strconv.Itoa(len(categories)) + " or q to quit)",
-		Validate: func(input string) error {
-			if input == "q" || input == "Q" {
-				return nil
-			}
-			
-			num, err := strconv.Atoi(input)
-			if err != nil {
-				return fmt.Errorf("invalid input: please enter a number or 'q'")
-			}
-			
-			if num < 1 || num > len(categories) {
-				return fmt.Errorf("invalid selection: please enter a number between 1 and %d", len(categories))
-			}
-			
-			return nil
-		},
-	}
-	
-	result, err := prompt.Run()
-	if err != nil {
-		return nil, fmt.Errorf("prompt failed: %w", err)
-	}
-	
-	// Handle quit
-	if result == "q" || result == "Q" {
-		return nil, nil
-	}
-	
-	// Get selected category by number
-	num, _ := strconv.Atoi(result)
-	return &categories[num-1], nil
-}
 
-// showSimpleToolMenu is a fallback simple tool menu
-func showSimpleToolMenu(tools []MenuItem, categoryName string) (*MenuItem, error) {
-	tool, action, err := showSimpleToolMenuWithAction(tools, categoryName)
-	if err != nil {
-		return nil, err
-	}
-	
-	if action == ActionBack {
-		return nil, nil // Signal to go back
-	}
-	
-	return tool, nil
-}
 
-// showSimpleToolMenuWithAction is a fallback simple tool menu with action tracking
-func showSimpleToolMenuWithAction(tools []MenuItem, categoryName string) (*MenuItem, MenuAction, error) {
-	fmt.Printf("\n" + strings.Repeat("=", 60) + "\n")
-	fmt.Printf("OpsKit - Tools in %s\n", categoryName)
-	fmt.Printf(strings.Repeat("=", 60) + "\n\n")
-	
-	fmt.Printf("Available Tools:\n\n")
-	for i, tool := range tools {
-		fmt.Printf("%d. %s\n", i+1, tool.Name)
-		fmt.Printf("   %s\n\n", tool.Description)
-	}
-	
-	// Get user input
-	prompt := promptui.Prompt{
-		Label: "Select a tool (1-" + strconv.Itoa(len(tools)) + ", b to go back, or q to quit)",
-		Validate: func(input string) error {
-			if input == "q" || input == "Q" || input == "b" || input == "B" {
-				return nil
-			}
-			
-			num, err := strconv.Atoi(input)
-			if err != nil {
-				return fmt.Errorf("invalid input: please enter a number, 'b' to go back, or 'q' to quit")
-			}
-			
-			if num < 1 || num > len(tools) {
-				return fmt.Errorf("invalid selection: please enter a number between 1 and %d", len(tools))
-			}
-			
-			return nil
-		},
-	}
-	
-	result, err := prompt.Run()
-	if err != nil {
-		return nil, ActionQuit, fmt.Errorf("prompt failed: %w", err)
-	}
-	
-	// Handle quit
-	if result == "q" || result == "Q" {
-		return nil, ActionQuit, nil
-	}
-	
-	// Handle back
-	if result == "b" || result == "B" {
-		return nil, ActionBack, nil
-	}
-	
-	// Get selected tool by number
-	num, _ := strconv.Atoi(result)
-	return &tools[num-1], ActionSelect, nil
-}
 
 // executeToolFromMenu executes a tool selected from the menu
 func executeToolFromMenu(item *MenuItem, cfg *config.Config, depsConfig *config.DependenciesConfig, dl *downloader.Downloader) error {
@@ -484,68 +240,6 @@ func executeToolFromMenu(item *MenuItem, cfg *config.Config, depsConfig *config.
 	return nil
 }
 
-// showSimpleUnifiedMenu is a fallback simple unified menu
-func showSimpleUnifiedMenu(items []UnifiedSearchItem, allTools []config.Tool) (*MenuItem, error) {
-	fmt.Printf("\n" + strings.Repeat("=", 60) + "\n")
-	fmt.Printf("OpsKit - Search Categories and Tools (Simple Mode)\n")
-	fmt.Printf(strings.Repeat("=", 60) + "\n\n")
-	
-	fmt.Printf("Available Items:\n\n")
-	for i, item := range items {
-		fmt.Printf("%d. %s\n", i+1, item.Name)
-		fmt.Printf("   %s\n\n", item.Description)
-	}
-	
-	// Get user input
-	prompt := promptui.Prompt{
-		Label: "Select an item (1-" + strconv.Itoa(len(items)) + " or q to quit)",
-		Validate: func(input string) error {
-			if input == "q" || input == "Q" {
-				return nil
-			}
-			
-			num, err := strconv.Atoi(input)
-			if err != nil {
-				return fmt.Errorf("invalid input: please enter a number or 'q'")
-			}
-			
-			if num < 1 || num > len(items) {
-				return fmt.Errorf("invalid selection: please enter a number between 1 and %d", len(items))
-			}
-			
-			return nil
-		},
-	}
-	
-	result, err := prompt.Run()
-	if err != nil {
-		return nil, fmt.Errorf("prompt failed: %w", err)
-	}
-	
-	// Handle quit
-	if result == "q" || result == "Q" {
-		return nil, nil
-	}
-	
-	// Get selected item by number
-	num, _ := strconv.Atoi(result)
-	selected := items[num-1]
-	
-	// Handle selection based on type
-	if selected.Type == "category" {
-		// Show tools in selected category
-		categoryTools := createMenuItems(selected.Category.Tools)
-		return showCategoryToolsMenu(categoryTools, selected.Category.Name, allTools)
-	} else {
-		// Direct tool selection
-		return &MenuItem{
-			ID:          selected.Tool.ID,
-			Name:        selected.Tool.Name,
-			Description: selected.Tool.Description,
-			Tool:        selected.Tool,
-		}, nil
-	}
-}
 
 // confirmContinue asks user if they want to continue
 func confirmContinue() bool {

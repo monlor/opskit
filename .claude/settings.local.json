@@ -13,7 +13,11 @@
       "Bash(go test:*)",
       "Bash(./opskit k8s-export:*)",
       "Bash(timeout:*)",
-      "Bash(go get:*)"
+      "Bash(go get:*)",
+      "Bash(git add:*)",
+      "WebFetch(domain:github.com)",
+      "Bash(export OPSKIT_DEBUG=1)",
+      "Bash(rm:*)"
     ],
     "deny": []
   }

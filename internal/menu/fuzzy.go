@@ -308,6 +308,195 @@ func (f *FuzzySelector) drawScreen() {
 	fmt.Print(showCursor)
 }
 
+// drawCategoryScreen renders the category selection interface
+func (f *FuzzySelector) drawCategoryScreen(title string) {
+	// Clear screen and hide cursor
+	fmt.Print(clearScreen + moveCursorHome + hideCursor)
+
+	// Header
+	fmt.Printf("%s%s%s%s\n", boldText, colorCyan, title, resetAttributes)
+	fmt.Printf("%sType to search, ↑/↓ to navigate, Enter to select, Esc to quit%s\n\n", 
+		dimText, resetAttributes)
+
+	// Search input
+	fmt.Printf("%s> %s%s%s\n", colorBlue, colorWhite, f.query, resetAttributes)
+	fmt.Printf("\n")
+
+	// Results info
+	total := len(f.items)
+	filtered := len(f.filteredItems)
+	fmt.Printf("%s[%d/%d categories]%s\n\n", dimText, filtered, total, resetAttributes)
+
+	// Display filtered categories
+	displayCount := f.maxDisplay
+	if displayCount > len(f.filteredItems) {
+		displayCount = len(f.filteredItems)
+	}
+
+	for i := 0; i < displayCount; i++ {
+		item := f.filteredItems[i]
+		
+		// Selection indicator and styling
+		if i == f.selectedIndex {
+			fmt.Printf("%s%s▶ %s", colorGreen, boldText, resetAttributes)
+		} else {
+			fmt.Printf("  ")
+		}
+
+		// Category name with highlighting
+		nameHighlighted := highlightMatch(item.Name, f.query)
+		if i == f.selectedIndex {
+			fmt.Printf("%s%s%s", boldText, nameHighlighted, resetAttributes)
+		} else {
+			fmt.Printf("%s", nameHighlighted)
+		}
+
+		fmt.Println()
+
+		// Description on next line with indent
+		if i == f.selectedIndex || len(f.filteredItems) <= 5 {
+			desc := item.Description
+			if len(desc) > f.termWidth-4 {
+				desc = desc[:f.termWidth-7] + "..."
+			}
+			descHighlighted := highlightMatch(desc, f.query)
+			fmt.Printf("    %s%s%s\n", dimText, descHighlighted, resetAttributes)
+		}
+	}
+
+	// Show cursor at input position
+	fmt.Printf("\033[4;%dH", len(f.query)+3) // Line 4, after "> " and query
+	fmt.Print(showCursor)
+}
+
+// drawToolScreen renders the tool selection interface with back navigation
+func (f *FuzzySelector) drawToolScreen(title string) {
+	// Clear screen and hide cursor
+	fmt.Print(clearScreen + moveCursorHome + hideCursor)
+
+	// Header
+	fmt.Printf("%s%s%s%s\n", boldText, colorCyan, title, resetAttributes)
+	fmt.Printf("%sType to search, ↑/↓ to navigate, Enter to select, 'b' to go back, Esc to quit%s\n\n", 
+		dimText, resetAttributes)
+
+	// Search input
+	fmt.Printf("%s> %s%s%s\n", colorBlue, colorWhite, f.query, resetAttributes)
+	fmt.Printf("\n")
+
+	// Results info
+	total := len(f.items)
+	filtered := len(f.filteredItems)
+	fmt.Printf("%s[%d/%d tools]%s\n\n", dimText, filtered, total, resetAttributes)
+
+	// Display filtered items
+	displayCount := f.maxDisplay
+	if displayCount > len(f.filteredItems) {
+		displayCount = len(f.filteredItems)
+	}
+
+	for i := 0; i < displayCount; i++ {
+		item := f.filteredItems[i]
+		
+		// Selection indicator and styling
+		if i == f.selectedIndex {
+			fmt.Printf("%s%s▶ %s", colorGreen, boldText, resetAttributes)
+		} else {
+			fmt.Printf("  ")
+		}
+
+		// Tool name with highlighting
+		nameHighlighted := highlightMatch(item.Name, f.query)
+		if i == f.selectedIndex {
+			fmt.Printf("%s%s%s", boldText, nameHighlighted, resetAttributes)
+		} else {
+			fmt.Printf("%s", nameHighlighted)
+		}
+
+		// Tool ID in parentheses if different from name
+		if !strings.Contains(strings.ToLower(item.Name), strings.ToLower(item.ID)) {
+			idHighlighted := highlightMatch(item.ID, f.query)
+			fmt.Printf(" %s(%s)%s", dimText, idHighlighted, resetAttributes)
+		}
+
+		fmt.Println()
+
+		// Description on next line with indent
+		if i == f.selectedIndex || len(f.filteredItems) <= 5 {
+			desc := item.Description
+			if len(desc) > f.termWidth-4 {
+				desc = desc[:f.termWidth-7] + "..."
+			}
+			descHighlighted := highlightMatch(desc, f.query)
+			fmt.Printf("    %s%s%s\n", dimText, descHighlighted, resetAttributes)
+		}
+	}
+
+	// Show cursor at input position
+	fmt.Printf("\033[4;%dH", len(f.query)+3) // Line 4, after "> " and query
+	fmt.Print(showCursor)
+}
+
+// drawUnifiedSearchScreen renders the unified search interface
+func (f *FuzzySelector) drawUnifiedSearchScreen(title string) {
+	// Clear screen and hide cursor
+	fmt.Print(clearScreen + moveCursorHome + hideCursor)
+
+	// Header
+	fmt.Printf("%s%s%s%s\n", boldText, colorCyan, title, resetAttributes)
+	fmt.Printf("%sType to search categories and tools, ↑/↓ to navigate, Enter to select, Esc to quit%s\n\n", 
+		dimText, resetAttributes)
+
+	// Search input
+	fmt.Printf("%s> %s%s%s\n", colorBlue, colorWhite, f.query, resetAttributes)
+	fmt.Printf("\n")
+
+	// Results info
+	total := len(f.items)
+	filtered := len(f.filteredItems)
+	fmt.Printf("%s[%d/%d items]%s\n\n", dimText, filtered, total, resetAttributes)
+
+	// Display filtered items
+	displayCount := f.maxDisplay
+	if displayCount > len(f.filteredItems) {
+		displayCount = len(f.filteredItems)
+	}
+
+	for i := 0; i < displayCount; i++ {
+		item := f.filteredItems[i]
+		
+		// Selection indicator and styling
+		if i == f.selectedIndex {
+			fmt.Printf("%s%s▶ %s", colorGreen, boldText, resetAttributes)
+		} else {
+			fmt.Printf("  ")
+		}
+
+		// Item name with highlighting and type indicator
+		nameHighlighted := highlightMatch(item.Name, f.query)
+		if i == f.selectedIndex {
+			fmt.Printf("%s%s%s", boldText, nameHighlighted, resetAttributes)
+		} else {
+			fmt.Printf("%s", nameHighlighted)
+		}
+
+		fmt.Println()
+
+		// Description on next line with indent
+		if i == f.selectedIndex || len(f.filteredItems) <= 8 {
+			desc := item.Description
+			if len(desc) > f.termWidth-4 {
+				desc = desc[:f.termWidth-7] + "..."
+			}
+			descHighlighted := highlightMatch(desc, f.query)
+			fmt.Printf("    %s%s%s\n", dimText, descHighlighted, resetAttributes)
+		}
+	}
+
+	// Show cursor at input position
+	fmt.Printf("\033[4;%dH", len(f.query)+3) // Line 4, after "> " and query
+	fmt.Print(showCursor)
+}
+
 // getGroupColor returns color for group
 func getGroupColor(group string) string {
 	switch strings.ToLower(group) {
@@ -444,6 +633,177 @@ func (f *FuzzySelector) Run() *MenuItem {
 	}
 }
 
+// runCategoryMode runs the fuzzy selector for category selection
+func (f *FuzzySelector) runCategoryMode(title string) *FuzzyMenuItem {
+	if len(f.items) == 0 {
+		return nil
+	}
+
+	// Set terminal to raw mode
+	if err := setRawMode(); err != nil {
+		logger.Error("Failed to set terminal to raw mode: %v", err)
+		// Fallback to simple input without raw mode
+		return f.runSimpleCategoryInput(title)
+	}
+	defer restoreTerminalMode()
+
+	// Initial draw
+	f.drawCategoryScreen(title)
+
+	// Input loop
+	buf := make([]byte, 3) // Buffer for escape sequences
+	for {
+		n, err := os.Stdin.Read(buf)
+		if err != nil {
+			continue
+		}
+
+		if n == 1 {
+			continueLoop, selectedItem := f.handleInput(buf[0])
+			if !continueLoop {
+				// Clear screen and restore cursor
+				fmt.Print(clearScreen + moveCursorHome + showCursor)
+				return selectedItem
+			}
+		} else if n == 3 && buf[0] == keyEsc && buf[1] == '[' {
+			// Handle arrow keys
+			switch buf[2] {
+			case 'A': // Up arrow
+				if f.selectedIndex > 0 {
+					f.selectedIndex--
+				}
+			case 'B': // Down arrow
+				if f.selectedIndex < len(f.filteredItems)-1 {
+					f.selectedIndex++
+				}
+			}
+		}
+
+		f.drawCategoryScreen(title)
+	}
+}
+
+// runToolMode runs the fuzzy selector for tool selection with back navigation
+func (f *FuzzySelector) runToolMode(title string) *FuzzyMenuItem {
+	if len(f.items) == 0 {
+		return nil
+	}
+
+	// Set terminal to raw mode
+	if err := setRawMode(); err != nil {
+		logger.Error("Failed to set terminal to raw mode: %v", err)
+		// Fallback to simple input without raw mode
+		return f.runSimpleToolInput(title)
+	}
+	defer restoreTerminalMode()
+
+	// Initial draw
+	f.drawToolScreen(title)
+
+	// Input loop
+	buf := make([]byte, 3) // Buffer for escape sequences
+	for {
+		n, err := os.Stdin.Read(buf)
+		if err != nil {
+			continue
+		}
+
+		if n == 1 {
+			// Handle 'b' for back navigation
+			if buf[0] == 'b' || buf[0] == 'B' {
+				// Clear screen and restore cursor
+				fmt.Print(clearScreen + moveCursorHome + showCursor)
+				return nil // Signal to go back
+			}
+			
+			continueLoop, selectedItem := f.handleInput(buf[0])
+			if !continueLoop {
+				// Clear screen and restore cursor
+				fmt.Print(clearScreen + moveCursorHome + showCursor)
+				return selectedItem
+			}
+		} else if n == 3 && buf[0] == keyEsc && buf[1] == '[' {
+			// Handle arrow keys
+			switch buf[2] {
+			case 'A': // Up arrow
+				if f.selectedIndex > 0 {
+					f.selectedIndex--
+				}
+			case 'B': // Down arrow
+				if f.selectedIndex < len(f.filteredItems)-1 {
+					f.selectedIndex++
+				}
+			}
+		}
+
+		f.drawToolScreen(title)
+	}
+}
+
+// runToolModeWithAction runs the fuzzy selector for tool selection with action tracking
+func (f *FuzzySelector) runToolModeWithAction(title string) FuzzyResult {
+	if len(f.items) == 0 {
+		return FuzzyResult{Item: nil, Action: ActionQuit}
+	}
+
+	// Set terminal to raw mode
+	if err := setRawMode(); err != nil {
+		logger.Error("Failed to set terminal to raw mode: %v", err)
+		// Fallback to simple input without raw mode
+		selected := f.runSimpleToolInput(title)
+		if selected == nil {
+			return FuzzyResult{Item: nil, Action: ActionQuit}
+		}
+		return FuzzyResult{Item: selected, Action: ActionSelect}
+	}
+	defer restoreTerminalMode()
+
+	// Initial draw
+	f.drawToolScreen(title)
+
+	// Input loop
+	buf := make([]byte, 3) // Buffer for escape sequences
+	for {
+		n, err := os.Stdin.Read(buf)
+		if err != nil {
+			continue
+		}
+
+		if n == 1 {
+			// Handle 'b' for back navigation
+			if buf[0] == 'b' || buf[0] == 'B' {
+				// Clear screen and restore cursor
+				fmt.Print(clearScreen + moveCursorHome + showCursor)
+				return FuzzyResult{Item: nil, Action: ActionBack}
+			}
+			
+			continueLoop, selectedItem := f.handleInput(buf[0])
+			if !continueLoop {
+				// Clear screen and restore cursor
+				fmt.Print(clearScreen + moveCursorHome + showCursor)
+				if selectedItem == nil {
+					return FuzzyResult{Item: nil, Action: ActionQuit}
+				}
+				return FuzzyResult{Item: selectedItem, Action: ActionSelect}
+			}
+		} else if n == 3 && buf[0] == keyEsc && buf[1] == '[' {
+			// Handle arrow keys
+			switch buf[2] {
+			case 'A': // Up arrow
+				if f.selectedIndex > 0 {
+					f.selectedIndex--
+				}
+			case 'B': // Down arrow
+				if f.selectedIndex < len(f.filteredItems)-1 {
+					f.selectedIndex++
+				}
+			}
+		}
+
+		f.drawToolScreen(title)
+	}
+}
+
 // runSimpleInput runs a simple input mode without raw terminal
 func (f *FuzzySelector) runSimpleInput() *MenuItem {
 	for {
@@ -498,6 +858,108 @@ func (f *FuzzySelector) runSimpleInput() *MenuItem {
 	}
 }
 
+// runSimpleCategoryInput runs simple category selection without raw terminal
+func (f *FuzzySelector) runSimpleCategoryInput(title string) *FuzzyMenuItem {
+	for {
+		fmt.Printf("\n" + strings.Repeat("=", 60) + "\n")
+		fmt.Printf("%s (Simple Mode)\n", title)
+		fmt.Printf(strings.Repeat("=", 60) + "\n\n")
+		
+		if f.query != "" {
+			fmt.Printf("Filter: %s\n\n", f.query)
+		}
+		
+		// Show filtered categories
+		displayCount := 10
+		if displayCount > len(f.filteredItems) {
+			displayCount = len(f.filteredItems)
+		}
+		
+		for i := 0; i < displayCount; i++ {
+			item := f.filteredItems[i]
+			fmt.Printf("%d. %s\n", i+1, item.Name)
+			fmt.Printf("   %s\n\n", item.Description)
+		}
+		
+		fmt.Printf("Type to search, number to select, 'c' to clear filter, 'q' to quit: ")
+		var input string
+		fmt.Scanln(&input)
+		
+		if input == "q" || input == "Q" {
+			return nil
+		}
+		
+		if input == "c" || input == "C" {
+			f.query = ""
+			f.filterItems()
+			continue
+		}
+		
+		// Try to parse as number
+		if num, err := strconv.Atoi(input); err == nil && num >= 1 && num <= len(f.filteredItems) {
+			selected := f.filteredItems[num-1]
+			return &selected
+		}
+		
+		// Add to query
+		f.query += input
+		f.filterItems()
+	}
+}
+
+// runSimpleToolInput runs simple tool selection without raw terminal
+func (f *FuzzySelector) runSimpleToolInput(title string) *FuzzyMenuItem {
+	for {
+		fmt.Printf("\n" + strings.Repeat("=", 60) + "\n")
+		fmt.Printf("%s (Simple Mode)\n", title)
+		fmt.Printf(strings.Repeat("=", 60) + "\n\n")
+		
+		if f.query != "" {
+			fmt.Printf("Filter: %s\n\n", f.query)
+		}
+		
+		// Show filtered tools
+		displayCount := 10
+		if displayCount > len(f.filteredItems) {
+			displayCount = len(f.filteredItems)
+		}
+		
+		for i := 0; i < displayCount; i++ {
+			item := f.filteredItems[i]
+			fmt.Printf("%d. %s\n", i+1, item.Name)
+			fmt.Printf("   %s\n\n", item.Description)
+		}
+		
+		fmt.Printf("Type to search, number to select, 'b' to go back, 'c' to clear filter, 'q' to quit: ")
+		var input string
+		fmt.Scanln(&input)
+		
+		if input == "q" || input == "Q" {
+			return nil
+		}
+		
+		if input == "b" || input == "B" {
+			return nil // Signal to go back
+		}
+		
+		if input == "c" || input == "C" {
+			f.query = ""
+			f.filterItems()
+			continue
+		}
+		
+		// Try to parse as number
+		if num, err := strconv.Atoi(input); err == nil && num >= 1 && num <= len(f.filteredItems) {
+			selected := f.filteredItems[num-1]
+			return &selected
+		}
+		
+		// Add to query
+		f.query += input
+		f.filterItems()
+	}
+}
+
 // Terminal mode handling
 var originalTermios unix.Termios
 
@@ -533,4 +995,239 @@ func ShowFuzzyMenu(items []MenuItem) (*MenuItem, error) {
 	selected := selector.Run()
 	
 	return selected, nil
+}
+
+// ShowFuzzyCategoryMenu displays the fuzzy selector for categories
+func ShowFuzzyCategoryMenu(items []FuzzyMenuItem, title string) (*FuzzyMenuItem, error) {
+	if len(items) == 0 {
+		return nil, fmt.Errorf("no categories to display")
+	}
+
+	selector := &FuzzySelector{
+		items:         items,
+		filteredItems: items,
+		query:         "",
+		selectedIndex: 0,
+		maxDisplay:    10,
+	}
+	
+	selector.updateTerminalSize()
+	selected := selector.runCategoryMode(title)
+	
+	return selected, nil
+}
+
+// FuzzyResult represents the result from fuzzy selector
+type FuzzyResult struct {
+	Item   *FuzzyMenuItem
+	Action MenuAction
+}
+
+// ShowFuzzyToolMenu displays the fuzzy selector for tools with back navigation
+func ShowFuzzyToolMenu(tools []MenuItem, title string) (*MenuItem, error) {
+	if len(tools) == 0 {
+		return nil, fmt.Errorf("no tools to display")
+	}
+
+	// Convert MenuItem to FuzzyMenuItem
+	var fuzzyItems []FuzzyMenuItem
+	for _, tool := range tools {
+		group := tool.Tool.Group
+		if group == "" {
+			group = tool.Tool.Category
+		}
+		
+		fuzzyItems = append(fuzzyItems, FuzzyMenuItem{
+			ID:          tool.ID,
+			Name:        tool.Name,
+			Description: tool.Description,
+			Group:       group,
+			Tool:        tool.Tool,
+			Score:       1.0,
+		})
+	}
+
+	selector := &FuzzySelector{
+		items:         fuzzyItems,
+		filteredItems: fuzzyItems,
+		query:         "",
+		selectedIndex: 0,
+		maxDisplay:    10,
+	}
+	
+	selector.updateTerminalSize()
+	selected := selector.runToolMode(title)
+	
+	if selected == nil {
+		return nil, nil
+	}
+	
+	// Convert back to MenuItem
+	return &MenuItem{
+		ID:          selected.ID,
+		Name:        selected.Name,
+		Description: selected.Description,
+		Tool:        selected.Tool,
+	}, nil
+}
+
+// ShowFuzzyToolMenuWithAction displays the fuzzy selector for tools with action tracking
+func ShowFuzzyToolMenuWithAction(tools []MenuItem, title string) (*MenuItem, MenuAction, error) {
+	if len(tools) == 0 {
+		return nil, ActionQuit, fmt.Errorf("no tools to display")
+	}
+
+	// Convert MenuItem to FuzzyMenuItem
+	var fuzzyItems []FuzzyMenuItem
+	for _, tool := range tools {
+		group := tool.Tool.Group
+		if group == "" {
+			group = tool.Tool.Category
+		}
+		
+		fuzzyItems = append(fuzzyItems, FuzzyMenuItem{
+			ID:          tool.ID,
+			Name:        tool.Name,
+			Description: tool.Description,
+			Group:       group,
+			Tool:        tool.Tool,
+			Score:       1.0,
+		})
+	}
+
+	selector := &FuzzySelector{
+		items:         fuzzyItems,
+		filteredItems: fuzzyItems,
+		query:         "",
+		selectedIndex: 0,
+		maxDisplay:    10,
+	}
+	
+	selector.updateTerminalSize()
+	result := selector.runToolModeWithAction(title)
+	
+	if result.Item == nil {
+		return nil, result.Action, nil
+	}
+	
+	// Convert back to MenuItem
+	return &MenuItem{
+		ID:          result.Item.ID,
+		Name:        result.Item.Name,
+		Description: result.Item.Description,
+		Tool:        result.Item.Tool,
+	}, result.Action, nil
+}
+
+// ShowUnifiedSearchMenu displays the unified search interface
+func ShowUnifiedSearchMenu(items []UnifiedSearchItem, title string) (*UnifiedSearchItem, error) {
+	if len(items) == 0 {
+		return nil, fmt.Errorf("no items to display")
+	}
+
+	// Convert UnifiedSearchItem to FuzzyMenuItem
+	var fuzzyItems []FuzzyMenuItem
+	for _, item := range items {
+		fuzzyItems = append(fuzzyItems, FuzzyMenuItem{
+			ID:          item.ID,
+			Name:        item.Name,
+			Description: item.Description,
+			Group:       item.Type,
+			Tool:        item.Tool,
+			Score:       1.0,
+		})
+	}
+
+	selector := &FuzzySelector{
+		items:         fuzzyItems,
+		filteredItems: fuzzyItems,
+		query:         "",
+		selectedIndex: 0,
+		maxDisplay:    15, // Show more items for unified search
+	}
+	
+	selector.updateTerminalSize()
+	
+	// Set terminal to raw mode
+	if err := setRawMode(); err != nil {
+		logger.Error("Failed to set terminal to raw mode: %v", err)
+		// Fallback to simple unified input
+		return showSimpleUnifiedFuzzyInput(items, title)
+	}
+	defer restoreTerminalMode()
+
+	// Initial draw
+	selector.drawUnifiedSearchScreen(title)
+
+	// Input loop
+	buf := make([]byte, 3) // Buffer for escape sequences
+	for {
+		n, err := os.Stdin.Read(buf)
+		if err != nil {
+			continue
+		}
+
+		if n == 1 {
+			continueLoop, selectedItem := selector.handleInput(buf[0])
+			if !continueLoop {
+				// Clear screen and restore cursor
+				fmt.Print(clearScreen + moveCursorHome + showCursor)
+				
+				if selectedItem == nil {
+					return nil, nil
+				}
+				
+				// Find the corresponding UnifiedSearchItem
+				for _, item := range items {
+					if item.ID == selectedItem.ID {
+						return &item, nil
+					}
+				}
+				return nil, nil
+			}
+		} else if n == 3 && buf[0] == keyEsc && buf[1] == '[' {
+			// Handle arrow keys
+			switch buf[2] {
+			case 'A': // Up arrow
+				if selector.selectedIndex > 0 {
+					selector.selectedIndex--
+				}
+			case 'B': // Down arrow
+				if selector.selectedIndex < len(selector.filteredItems)-1 {
+					selector.selectedIndex++
+				}
+			}
+		}
+
+		selector.drawUnifiedSearchScreen(title)
+	}
+}
+
+// showSimpleUnifiedFuzzyInput runs simple unified search without raw terminal
+func showSimpleUnifiedFuzzyInput(items []UnifiedSearchItem, title string) (*UnifiedSearchItem, error) {
+	fmt.Printf("\n" + strings.Repeat("=", 60) + "\n")
+	fmt.Printf("%s (Simple Mode)\n", title)
+	fmt.Printf(strings.Repeat("=", 60) + "\n\n")
+	
+	fmt.Printf("Available Items:\n\n")
+	for i, item := range items {
+		fmt.Printf("%d. %s\n", i+1, item.Name)
+		fmt.Printf("   %s\n\n", item.Description)
+	}
+	
+	fmt.Printf("Type number to select, 'q' to quit: ")
+	var input string
+	fmt.Scanln(&input)
+	
+	if input == "q" || input == "Q" {
+		return nil, nil
+	}
+	
+	// Try to parse as number
+	if num, err := strconv.Atoi(input); err == nil && num >= 1 && num <= len(items) {
+		return &items[num-1], nil
+	}
+	
+	fmt.Printf("Invalid selection, please try again.\n")
+	return showSimpleUnifiedFuzzyInput(items, title)
 }

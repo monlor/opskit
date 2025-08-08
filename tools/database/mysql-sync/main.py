@@ -19,7 +19,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../../../common/pyth
 
 from logger import get_logger
 from storage import get_storage
-from utils import load_config, save_config, run_command, get_user_input, timestamp
+from utils import run_command, get_user_input, timestamp, get_env_var
 
 # Third-party imports
 try:
@@ -43,16 +43,34 @@ class MySQLSyncTool:
     """MySQL database synchronization tool with OpsKit integration"""
     
     def __init__(self):
-        self.config = load_config('mysql-sync')
         self.connections_cache = {}
         self.load_cached_connections()
         
         # Tool metadata
         self.tool_name = "MySQL Sync"
-        self.version = "2.0.0"
         self.description = "Interactive MySQL database batch synchronization tool"
         
-        logger.info(f"🚀 Starting {self.tool_name} v{self.version}")
+        # Load configuration from environment variables using utils helper
+        self.timeout = get_env_var('TIMEOUT', 30, int)
+        self.max_retries = get_env_var('MAX_RETRIES', 3, int)
+        self.connect_timeout = get_env_var('CONNECT_TIMEOUT', 30, int)
+        self.batch_size = get_env_var('BATCH_SIZE', 100, int)
+        self.confirm_destructive = get_env_var('CONFIRM_DESTRUCTIVE', True, bool)
+        self.show_progress = get_env_var('SHOW_PROGRESS', True, bool)
+        self.debug = get_env_var('DEBUG', False, bool)
+        self.verbose = get_env_var('VERBOSE', False, bool)
+        self.cache_connections = get_env_var('CACHE_CONNECTIONS', True, bool)
+        self.max_history_records = get_env_var('MAX_HISTORY_RECORDS', 50, int)
+        
+        # MySQL dump settings
+        self.single_transaction = get_env_var('SINGLE_TRANSACTION', True, bool)
+        self.include_routines = get_env_var('INCLUDE_ROUTINES', True, bool)
+        self.include_triggers = get_env_var('INCLUDE_TRIGGERS', True, bool)
+        self.lock_tables = get_env_var('LOCK_TABLES', False, bool)
+        
+        logger.info(f"🚀 Starting {self.tool_name}")
+        if self.debug:
+            logger.info(f"Debug mode enabled - timeout: {self.timeout}s, batch_size: {self.batch_size}")
     
     def load_cached_connections(self):
         """Load cached connections from storage"""
@@ -148,7 +166,7 @@ class MySQLSyncTool:
                 port=int(conn_info['port']),
                 user=conn_info['user'],
                 password=conn_info['password'],
-                connect_timeout=self.config.get('connections.default_timeout', 30)
+                connect_timeout=self.connect_timeout
             )
             
             with connection.cursor() as cursor:
@@ -266,12 +284,18 @@ class MySQLSyncTool:
                 f'--port={source_conn["port"]}',
                 f'--user={source_conn["user"]}',
                 f'--password={source_conn["password"]}',
-                '--single-transaction',
-                '--routines',
-                '--triggers',
-                '--lock-tables=false',
                 db_name
             ]
+            
+            # Add dump options based on environment variables
+            if self.single_transaction:
+                dump_cmd.insert(-1, '--single-transaction')
+            if self.include_routines:
+                dump_cmd.insert(-1, '--routines')
+            if self.include_triggers:
+                dump_cmd.insert(-1, '--triggers')
+            if not self.lock_tables:
+                dump_cmd.insert(-1, '--lock-tables=false')
             
             # Build mysql import command
             import_cmd = [
@@ -308,7 +332,7 @@ class MySQLSyncTool:
             dump_process.stdout.close()
             
             # Wait for both processes
-            import_output, import_error = import_process.communicate()
+            _, import_error = import_process.communicate()
             dump_process.wait()
             
             end_time = datetime.now()
@@ -423,9 +447,9 @@ class MySQLSyncTool:
         # Save to history
         history = storage.get('sync_history', [])
         history.append(operation_record)
-        # Keep only last 50 operations
-        if len(history) > 50:
-            history = history[-50:]
+        # Keep only last N operations (from environment variable)
+        if len(history) > self.max_history_records:
+            history = history[-self.max_history_records:]
         storage.set('sync_history', history)
         
         logger.info(f"🎉 Batch sync completed: {successful} successful, {failed} failed")
@@ -477,7 +501,7 @@ class MySQLSyncTool:
                 sys.exit(1)
             
             # Show tool info
-            print(f"\n{Fore.BLUE}{Style.BRIGHT}=== {self.tool_name} v{self.version} ==={Style.RESET_ALL}")
+            print(f"\n{Fore.BLUE}{Style.BRIGHT}=== {self.tool_name} ==={Style.RESET_ALL}")
             print(f"{Style.DIM}{self.description}{Style.RESET_ALL}\n")
             
             # Check for history command

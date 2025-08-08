@@ -26,7 +26,6 @@ sys.path.insert(0, str(OPSKIT_ROOT))
 
 try:
     from core.cli import OpsKitCLI
-    from core.config_manager import ConfigManager
     from core.platform_utils import PlatformUtils
 except ImportError as e:
     print(f"Error: Failed to import OpsKit core modules: {e}")
@@ -104,12 +103,12 @@ def main():
     if args.debug:
         os.environ['OPSKIT_LOG_LEVEL'] = 'DEBUG'
     
-    # Initialize configuration manager
+    # Ensure data directory exists for environment variables
     try:
-        config_manager = ConfigManager()
-        config_manager.ensure_user_config()
+        data_dir = OPSKIT_ROOT / 'data'
+        data_dir.mkdir(exist_ok=True)
     except Exception as e:
-        print(f"Error initializing configuration: {e}")
+        print(f"Error creating data directory: {e}")
         sys.exit(1)
     
     # Initialize CLI

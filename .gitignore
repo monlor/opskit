@@ -25,7 +25,10 @@ build/
 venv/
 .venv/
 env/
+
+# Environment files (allow tool-level .env files)
 .env
+!tools/**/.env
 
 # IDE 文件
 .vscode/

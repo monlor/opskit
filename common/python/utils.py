@@ -19,117 +19,79 @@ from typing import Any, Dict, List, Optional, Union, Tuple
 from datetime import datetime
 
 
-def load_config(tool_name: str, config_file: Optional[str] = None) -> Dict[str, Any]:
+def get_env_var(key: str, default: Any = None, var_type: type = str) -> Any:
     """
-    Load configuration for a tool
+    Get environment variable with type conversion
     
     Args:
-        tool_name: Name of the tool
-        config_file: Specific config file path (optional)
-    
+        key: Environment variable name
+        default: Default value if not found
+        var_type: Type to convert to (str, int, float, bool)
+        
     Returns:
-        Configuration dictionary
+        Environment variable value converted to specified type
     """
+    value = os.environ.get(key)
+    
+    if value is None:
+        return default
+    
     try:
-        # Import here to avoid circular imports
-        from ..core.config_manager import ConfigManager
-        
-        config_manager = ConfigManager()
-        
-        if config_file:
-            # Load specific config file
-            config_path = Path(config_file)
-            if config_path.exists():
-                return config_manager._load_yaml_file(config_path)
-            else:
-                return {}
+        if var_type == bool:
+            return value.lower() in ('true', '1', 'yes', 'on')
+        elif var_type == int:
+            return int(value)
+        elif var_type == float:
+            return float(value)
         else:
-            # Load tool configuration
-            return config_manager.get_tool_config(tool_name)
-    
-    except ImportError:
-        # Fallback method without config manager
-        return _load_config_fallback(tool_name, config_file)
+            return str(value)
+    except (ValueError, TypeError):
+        return default
 
 
-def _load_config_fallback(tool_name: str, config_file: Optional[str] = None) -> Dict[str, Any]:
-    """Fallback config loading method"""
-    if config_file:
-        config_path = Path(config_file)
-    else:
-        # Try to find config in standard locations
-        current_file = Path(__file__).resolve()
-        opskit_root = current_file.parent.parent.parent
-        config_path = opskit_root / 'user_config' / 'tool_configs' / f'{tool_name}.yaml'
-    
-    if config_path.exists():
-        try:
-            with open(config_path, 'r', encoding='utf-8') as f:
-                return yaml.safe_load(f) or {}
-        except Exception:
-            return {}
-    
-    return {}
-
-
-def save_config(tool_name: str, config: Dict[str, Any], 
-               config_file: Optional[str] = None) -> bool:
+def load_env_file(env_file_path: Union[str, Path]) -> Dict[str, str]:
     """
-    Save configuration for a tool
+    Load environment variables from .env file
     
     Args:
-        tool_name: Name of the tool
-        config: Configuration dictionary to save
-        config_file: Specific config file path (optional)
-    
+        env_file_path: Path to .env file
+        
     Returns:
-        True if saved successfully
+        Dictionary of environment variables
     """
-    try:
-        # Import here to avoid circular imports
-        from ..core.config_manager import ConfigManager
-        
-        config_manager = ConfigManager()
-        
-        if config_file:
-            # Save to specific file
-            config_path = Path(config_file)
-            config_path.parent.mkdir(parents=True, exist_ok=True)
-            config_manager._save_yaml_file(config_path, config)
-        else:
-            # Save tool configuration
-            config_manager.set_tool_config(tool_name, config)
-        
-        return True
+    env_vars = {}
+    env_file_path = Path(env_file_path)
     
-    except ImportError:
-        # Fallback method
-        return _save_config_fallback(tool_name, config, config_file)
-
-
-def _save_config_fallback(tool_name: str, config: Dict[str, Any], 
-                         config_file: Optional[str] = None) -> bool:
-    """Fallback config saving method"""
+    if not env_file_path.exists():
+        return env_vars
+    
     try:
-        if config_file:
-            config_path = Path(config_file)
-        else:
-            current_file = Path(__file__).resolve()
-            opskit_root = current_file.parent.parent.parent
-            config_dir = opskit_root / 'user_config' / 'tool_configs'
-            config_dir.mkdir(parents=True, exist_ok=True)
-            config_path = config_dir / f'{tool_name}.yaml'
-        
-        config_path.parent.mkdir(parents=True, exist_ok=True)
-        
-        with open(config_path, 'w', encoding='utf-8') as f:
-            yaml.dump(config, f, default_flow_style=False, indent=2, 
-                     allow_unicode=True, sort_keys=False)
-        
-        return True
+        with open(env_file_path, 'r', encoding='utf-8') as f:
+            for line_num, line in enumerate(f, 1):
+                line = line.strip()
+                
+                # Skip empty lines and comments
+                if not line or line.startswith('#'):
+                    continue
+                
+                # Match KEY=VALUE pattern
+                if '=' in line:
+                    key, value = line.split('=', 1)
+                    key = key.strip()
+                    value = value.strip()
+                    
+                    # Remove quotes if present
+                    if value.startswith('"') and value.endswith('"'):
+                        value = value[1:-1]
+                    elif value.startswith("'") and value.endswith("'"):
+                        value = value[1:-1]
+                    
+                    env_vars[key] = value
     
     except Exception:
-        return False
+        pass
+    
+    return env_vars
 
 
 def ensure_directory(path: Union[str, Path]) -> Path:

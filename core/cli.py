@@ -43,7 +43,7 @@ try:
 except ImportError:
     prompt_toolkit_available = False
 
-from .config_manager import ConfigManager
+from .env_manager import EnvManager
 from .platform_utils import PlatformUtils
 from .dependency_manager import DependencyManager
 import yaml
@@ -68,7 +68,7 @@ class OpsKitCLI:
         self._yaml_tools = None
         
         # Initialize managers
-        self.config_manager = ConfigManager()
+        self.env_manager = EnvManager(str(self.opskit_root))
         self.platform_utils = PlatformUtils()
         self.dependency_manager = DependencyManager(self.opskit_root, debug=debug)
     
@@ -158,6 +158,7 @@ class OpsKitCLI:
         """Parse tool information from directory"""
         try:
             tool_name = tool_dir.name
+            category = tool_dir.parent.name
             
             # Look for main executable
             main_file = None
@@ -170,35 +171,28 @@ class OpsKitCLI:
             if not main_file:
                 return None
             
-            # Parse CLAUDE.md for description
+            # Get version and description from tools.yaml
+            version = "1.0.0"  # default version
             description = "No description available"
-            claude_md = tool_dir / 'CLAUDE.md'
-            if claude_md.exists():
+            
+            # Load tools.yaml for metadata
+            tools_yaml_path = self.opskit_root / 'config' / 'tools.yaml'
+            if tools_yaml_path.exists():
                 try:
-                    with open(claude_md, 'r', encoding='utf-8') as f:
-                        lines = f.readlines()
+                    with open(tools_yaml_path, 'r', encoding='utf-8') as f:
+                        tools_config = yaml.safe_load(f)
                     
-                    # Look for description section
-                    in_description = False
-                    desc_lines = []
-                    for line in lines:
-                        line = line.strip()
-                        if line.startswith('## ') and ('功能描述' in line or 'description' in line.lower()):
-                            in_description = True
-                            continue
-                        elif line.startswith('## ') and in_description:
-                            break
-                        elif in_description and line and not line.startswith('#'):
-                            desc_lines.append(line)
-                    
-                    if desc_lines:
-                        description = ' '.join(desc_lines)[:200] + ('...' if len(' '.join(desc_lines)) > 200 else '')
+                    if tools_config and 'tools' in tools_config:
+                        tool_info = tools_config['tools'].get(category, {}).get(tool_name, {})
+                        if tool_info:
+                            version = tool_info.get('version', version)
+                            description = tool_info.get('description', description)
                 except Exception:
                     pass
             
-            # Check for requirements
+            # Check for requirements and env file
             has_python_deps = (tool_dir / 'requirements.txt').exists()
-            has_config = (tool_dir / 'config.yaml.template').exists()
+            has_env_file = (tool_dir / '.env').exists()
             
             # Determine tool type
             tool_type = 'python' if main_file.endswith('.py') else 'shell'
@@ -208,10 +202,11 @@ class OpsKitCLI:
                 'path': str(tool_dir),
                 'main_file': main_file,
                 'description': description,
+                'version': version,
                 'type': tool_type,
                 'has_python_deps': has_python_deps,
-                'has_config': has_config,
-                'category': tool_dir.parent.name
+                'has_env_file': has_env_file,
+                'category': category
             }
         
         except Exception as e:
@@ -717,7 +712,7 @@ class OpsKitCLI:
                         print(f"  {tool['name']} ({tool['type']}) - {tool['description']}")
     
     def run_tool(self, tool_name: str, tool_args: List[str] = None) -> int:
-        """Run a specific tool directly with dependency management"""
+        """Run a specific tool with environment variable injection and dependency management"""
         if tool_args is None:
             tool_args = []
         
@@ -737,17 +732,70 @@ class OpsKitCLI:
             self._print(f"Tool '{tool_name}' not found", "red")
             return 1
         
-        self._print(f"Running {tool_name}...\n", "green")
+        # Display tool info with version
+        tool_version = found_tool.get('version', '1.0.0')
+        self._print(f"🚀 Running {tool_name} v{tool_version}...\n", "green")
         
-        # Run tool with dependency management
         try:
+            # 1. Inject environment variables
+            tool_path = found_tool['path']
+            env_vars = self.env_manager.inject_env_vars(tool_path)
+            
+            if self.debug and env_vars:
+                self._print(f"Debug: Loaded {len(env_vars)} environment variables", "cyan")
+                for key, value in list(env_vars.items())[:5]:  # Show first 5
+                    self._print(f"  {key}={value}", "dim")
+                if len(env_vars) > 5:
+                    self._print(f"  ... and {len(env_vars) - 5} more", "dim")
+                self._print("")
+            
+            # Set environment variables in current process
+            self.env_manager.set_environment_variables(env_vars)
+            
+            # 2. Run tool with dependency management
             return self.dependency_manager.run_tool_with_dependencies(found_tool, tool_args)
+            
         except Exception as e:
-            self._print(f"Error running tool: {e}", "red")
+            self._print(f"❌ Error running tool: {e}", "red")
             if self.debug:
                 import traceback
                 traceback.print_exc()
             return 1
+    
+    def show_tool_env_config(self, tool_name: str) -> None:
+        """Display environment variable configuration for a tool"""
+        # Find the tool
+        tools = self.discover_tools()
+        found_tool = None
+        
+        for category, cat_tools in tools.items():
+            for tool in cat_tools:
+                if tool['name'] == tool_name:
+                    found_tool = tool
+                    break
+            if found_tool:
+                break
+        
+        if not found_tool:
+            self._print(f"Tool '{tool_name}' not found", "red")
+            return
+        
+        # Get environment configuration summary
+        tool_path = found_tool['path']
+        env_summary = self.env_manager.get_config_summary(tool_path)
+        
+        self._print_panel(
+            f"Tool: {tool_name} v{found_tool.get('version', '1.0.0')}\n"
+            f"Tool Prefix: {env_summary['tool_prefix']}\n"
+            f"Tool Environment Variables: {env_summary['tool_env_count']}\n"
+            f"Global Environment Variables: {env_summary['global_env_count']}\n"
+            f"Total Final Variables: {env_summary['final_env_count']}\n\n"
+            f"Tool .env file: {env_summary['tool_env_file']}\n"
+            f"Global .env file: {env_summary['global_env_file']}\n\n"
+            f"Sample Variables:\n" +
+            '\n'.join([f"  {k}={v}" for k, v in env_summary['sample_vars'].items()]),
+            f"{tool_name} Environment Configuration"
+        )
     
     def search_tools(self, query: str) -> None:
         """Search tools by name or description"""

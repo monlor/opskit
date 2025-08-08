@@ -4,21 +4,30 @@
 tools:
   database:
     mysql-sync:
+      version: "2.0.0"
       description: MySQL database batch synchronization tool that provides safe, interactive database-to-database sync operations
       keywords: [mysql, database, sync, migration, backup]
       dependencies: [mysql-client]  # 引用 dependencies.yaml 中的定义
       
   network:
     port-scanner:
+      version: "1.0.0"
       description: Network port scanner to check open ports on target hosts with TCP/UDP support and threading
       keywords: [network, port, scan, security, tcp, udp]
       dependencies: [nmap, network-tools]  # 引用系统依赖定义
       
   system:
     system-info:
+      version: "1.0.0"
       description: Display comprehensive system information including OS details, hardware specs, and network configuration  
       keywords: [system, info, hardware, os, monitoring]
       # 无额外系统依赖，使用 Python 内置库
+      
+    disk-usage:
+      version: "1.0.0"
+      description: Disk usage analysis tool with configurable thresholds, multiple output formats, and environment-based configuration
+      keywords: [disk, usage, storage, filesystem, monitoring]
+      # 无额外系统依赖，使用 Shell 内置命令
 
 # 工具类别定义
 categories:

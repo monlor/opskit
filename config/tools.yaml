@@ -1,0 +1,50 @@
+# OpsKit 工具定义文件
+# 定义所有可用工具的信息和配置
+
+tools:
+  database:
+    mysql-sync:
+      description: MySQL database batch synchronization tool that provides safe, interactive database-to-database sync operations
+      keywords: [mysql, database, sync, migration, backup]
+      dependencies: [mysql-client]  # 引用 dependencies.yaml 中的定义
+      
+  network:
+    port-scanner:
+      description: Network port scanner to check open ports on target hosts with TCP/UDP support and threading
+      keywords: [network, port, scan, security, tcp, udp]
+      dependencies: [nmap, network-tools]  # 引用系统依赖定义
+      
+  system:
+    system-info:
+      description: Display comprehensive system information including OS details, hardware specs, and network configuration  
+      keywords: [system, info, hardware, os, monitoring]
+      # 无额外系统依赖，使用 Python 内置库
+
+# 工具类别定义
+categories:
+  database:
+    name: Database Tools
+    description: Database management, backup, synchronization and migration tools
+    icon: 🗄️
+    
+  network:
+    name: Network Tools
+    description: Network monitoring, scanning, troubleshooting and connectivity tools
+    icon: 🌐
+    
+  system:
+    name: System Tools
+    description: System monitoring, information gathering and administration tools
+    icon: 🔧
+    
+  monitoring:
+    name: Monitoring Tools
+    description: Performance monitoring, alerting and observability tools
+    icon: 📊
+
+# 全局配置
+global:
+  auto_install_deps: true
+  cache_dependencies: true
+  default_timeout: 300
+  max_parallel_installs: 3

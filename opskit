@@ -1,0 +1,187 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+OpsKit - Unified Operations Tool Management Platform
+
+This is the main entry point for OpsKit, providing a command-line interface
+for managing and running various operational tools.
+
+Usage:
+    opskit                  # Interactive mode
+    opskit list             # List all available tools
+    opskit run <tool>       # Run a specific tool
+    opskit config          # Configuration management
+    opskit update          # Update OpsKit and tools
+    opskit version         # Show version information
+"""
+
+import os
+import sys
+import argparse
+from pathlib import Path
+
+# Add the OpsKit root directory to Python path
+OPSKIT_ROOT = Path(__file__).parent.absolute()
+sys.path.insert(0, str(OPSKIT_ROOT))
+
+try:
+    from core.cli import OpsKitCLI
+    from core.config_manager import ConfigManager
+    from core.platform_utils import PlatformUtils
+except ImportError as e:
+    print(f"Error: Failed to import OpsKit core modules: {e}")
+    print("Please ensure OpsKit is properly installed.")
+    sys.exit(1)
+
+__version__ = "0.1.0"
+__author__ = "OpsKit Development Team"
+
+
+def print_version():
+    """Print version information"""
+    print(f"OpsKit v{__version__}")
+    print(f"Python {sys.version}")
+    print(f"Platform: {PlatformUtils.get_platform_info()}")
+
+
+def print_help():
+    """Print help information"""
+    help_text = """
+OpsKit - Unified Operations Tool Management Platform
+
+Usage:
+    opskit                  Interactive mode - browse and run tools
+    opskit list             List all available tools by category
+    opskit run <tool>       Run a specific tool by name
+    opskit search <query>   Search tools by name or description
+    opskit config           Configuration management interface
+    opskit update           Update OpsKit to latest version (git pull)
+    opskit status           Show system status and health check
+    opskit version          Show version information
+    opskit help             Show this help message
+
+Examples:
+    opskit                  # Enter interactive mode
+    opskit list             # Show all tools
+    opskit run mysql-sync   # Run MySQL sync tool
+    opskit config mysql-sync  # Configure MySQL sync tool
+    
+Environment Variables:
+    OPSKIT_HOME            Custom OpsKit installation directory
+    OPSKIT_LOG_LEVEL       Log level (DEBUG, INFO, WARNING, ERROR)
+    
+For more information, visit: https://github.com/monlor/opskit
+"""
+    print(help_text.strip())
+
+
+def main():
+    """Main entry point"""
+    parser = argparse.ArgumentParser(
+        prog='opskit',
+        description='Unified Operations Tool Management Platform',
+        add_help=False
+    )
+    
+    parser.add_argument('command', nargs='?', help='Command to execute')
+    parser.add_argument('args', nargs='*', help='Command arguments')
+    parser.add_argument('--help', '-h', action='store_true', help='Show help message')
+    parser.add_argument('--version', '-v', action='store_true', help='Show version')
+    parser.add_argument('--debug', action='store_true', help='Enable debug mode')
+    
+    args = parser.parse_args()
+    
+    # Handle version and help flags
+    if args.version:
+        print_version()
+        return
+    
+    if args.help:
+        print_help()
+        return
+    
+    # Set debug mode
+    if args.debug:
+        os.environ['OPSKIT_LOG_LEVEL'] = 'DEBUG'
+    
+    # Initialize configuration manager
+    try:
+        config_manager = ConfigManager()
+        config_manager.ensure_user_config()
+    except Exception as e:
+        print(f"Error initializing configuration: {e}")
+        sys.exit(1)
+    
+    # Initialize CLI
+    try:
+        cli = OpsKitCLI(debug=args.debug)
+    except Exception as e:
+        print(f"Error initializing OpsKit CLI: {e}")
+        sys.exit(1)
+    
+    # Handle commands
+    command = args.command
+    command_args = args.args
+    
+    try:
+        if command is None:
+            # No command provided - enter interactive mode
+            cli.interactive_mode()
+        
+        elif command == 'list':
+            cli.list_tools(category=command_args[0] if command_args else None)
+        
+        elif command == 'run':
+            if not command_args:
+                print("Error: Tool name required for 'run' command")
+                print("Usage: opskit run <tool-name> [tool-args...]")
+                sys.exit(1)
+            tool_name = command_args[0]
+            tool_args = command_args[1:] if len(command_args) > 1 else []
+            exit_code = cli.run_tool(tool_name, tool_args)
+            sys.exit(exit_code)
+        
+        elif command == 'search':
+            if not command_args:
+                print("Error: Search query required for 'search' command")
+                print("Usage: opskit search <query>")
+                sys.exit(1)
+            cli.search_tools(' '.join(command_args))
+        
+        elif command == 'config':
+            if command_args:
+                cli.configure_tool(command_args[0])
+            else:
+                cli.configuration_menu()
+        
+        elif command == 'update':
+            cli.update_opskit()
+        
+        elif command == 'status':
+            cli.show_status()
+        
+        elif command == 'version':
+            print_version()
+        
+        elif command == 'help':
+            print_help()
+        
+        else:
+            print(f"Error: Unknown command '{command}'")
+            print("Use 'opskit help' for usage information")
+            sys.exit(1)
+    
+    except KeyboardInterrupt:
+        print("\nOperation cancelled by user")
+        sys.exit(0)
+    except Exception as e:
+        if args.debug:
+            import traceback
+            traceback.print_exc()
+        else:
+            print(f"Error: {e}")
+        sys.exit(1)
+
+
+if __name__ == '__main__':
+    main()

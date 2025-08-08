@@ -1,0 +1,55 @@
+# 用户数据目录
+data/
+*.local.yaml
+*.local.yml
+
+# 缓存和临时文件
+cache/
+logs/
+*.log
+
+# 工具资源文件
+tools/*/resources/
+
+# Python 相关
+__pycache__/
+*.pyc
+*.pyo
+.Python
+*.egg-info/
+.pytest_cache/
+dist/
+build/
+
+# 虚拟环境
+venv/
+.venv/
+env/
+.env
+
+# IDE 文件
+.vscode/
+.idea/
+*.swp
+*.swo
+.vim/
+
+# 系统文件
+.DS_Store
+Thumbs.db
+.directory
+
+# 备份文件
+*.bak
+*.backup
+*.tmp
+*~
+
+# 编译文件
+*.o
+*.so
+*.dylib
+*.dll
+
+# 调试文件
+*.dSYM/

@@ -1,0 +1,125 @@
+# OpsKit 依赖管理配置
+# 定义系统依赖和不同环境下的包名映射
+
+# 系统依赖定义
+system_dependencies:
+  mysql-client:
+    description: MySQL client tools (mysql, mysqldump)
+    packages:
+      ubuntu: mysql-client
+      debian: mysql-client
+      centos: mysql
+      rhel: mysql
+      fedora: mysql
+      arch: mysql
+      macos: mysql-client
+      macos_homebrew: mysql-client
+    commands: [mysql, mysqldump]
+    
+  postgresql-client:
+    description: PostgreSQL client tools (psql, pg_dump)
+    packages:
+      ubuntu: postgresql-client
+      debian: postgresql-client
+      centos: postgresql
+      rhel: postgresql
+      fedora: postgresql
+      arch: postgresql
+      macos: postgresql
+      macos_homebrew: postgresql
+    commands: [psql, pg_dump]
+    
+  network-tools:
+    description: Network analysis tools
+    packages:
+      ubuntu: net-tools
+      debian: net-tools
+      centos: net-tools
+      rhel: net-tools
+      fedora: net-tools
+      arch: net-tools
+      macos: null  # Built-in
+      macos_homebrew: null
+    commands: [netstat, ss, ping]
+    
+  nmap:
+    description: Network scanner
+    packages:
+      ubuntu: nmap
+      debian: nmap
+      centos: nmap
+      rhel: nmap
+      fedora: nmap
+      arch: nmap
+      macos: nmap
+      macos_homebrew: nmap
+    commands: [nmap]
+    
+  git:
+    description: Git version control
+    packages:
+      ubuntu: git
+      debian: git
+      centos: git
+      rhel: git
+      fedora: git
+      arch: git
+      macos: git
+      macos_homebrew: git
+    commands: [git]
+    
+  curl:
+    description: HTTP client
+    packages:
+      ubuntu: curl
+      debian: curl
+      centos: curl
+      rhel: curl
+      fedora: curl
+      arch: curl
+      macos: null  # Built-in
+      macos_homebrew: null
+    commands: [curl]
+    
+  jq:
+    description: JSON processor
+    packages:
+      ubuntu: jq
+      debian: jq
+      centos: jq
+      rhel: jq
+      fedora: jq
+      arch: jq
+      macos: jq
+      macos_homebrew: jq
+    commands: [jq]
+    
+  docker:
+    description: Docker containerization platform
+    packages:
+      ubuntu: docker.io
+      debian: docker.io
+      centos: docker
+      rhel: docker
+      fedora: docker
+      arch: docker
+      macos: docker  # Docker Desktop
+      macos_homebrew: docker
+    commands: [docker]
+
+# 包管理器检测顺序
+package_managers:
+  ubuntu: [apt, apt-get]
+  debian: [apt, apt-get]
+  centos: [dnf, yum]
+  rhel: [dnf, yum]
+  fedora: [dnf, yum]
+  arch: [pacman]
+  opensuse: [zypper]
+  macos: [brew, port]
+
+# 全局设置
+settings:
+  auto_install: false  # 是否自动安装系统依赖（默认仅提示）
+  check_commands: true  # 检查命令是否可用
+  suggest_install: true  # 提供安装建议

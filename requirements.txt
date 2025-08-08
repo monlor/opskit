@@ -1,0 +1,38 @@
+# OpsKit Core Dependencies
+# Minimum required packages for OpsKit operation
+
+# YAML configuration handling
+PyYAML>=6.0
+
+# Enhanced command line interfaces
+click>=8.0.0
+colorama>=0.4.4
+
+# Configuration and data persistence
+configparser>=5.0.0
+
+# System information and platform detection
+psutil>=5.8.0
+distro>=1.6.0
+
+# Progress bars and user interface
+rich>=12.0.0
+prompt-toolkit>=3.0.0
+
+# HTTP requests for resource downloading
+requests>=2.25.0
+
+# Git operations
+GitPython>=3.1.0
+
+# JSON handling
+orjson>=3.6.0
+
+# Virtual environment management
+virtualenv>=20.0.0
+
+# Development and testing dependencies (optional)
+# pytest>=6.0.0
+# pytest-cov>=2.10.0
+# black>=21.0.0
+# flake8>=3.8.0

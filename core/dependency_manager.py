@@ -15,6 +15,7 @@ import shutil
 from pathlib import Path
 from typing import List, Dict, Optional, Tuple
 import json
+import yaml
 
 from .platform_utils import PlatformUtils
 
@@ -36,6 +37,27 @@ class DependencyManager:
         
         # Platform utilities
         self.platform_utils = PlatformUtils()
+        
+        # Load dependency configuration
+        self.dependencies_config = self._load_dependencies_config()
+    
+    def _load_dependencies_config(self) -> Dict:
+        """Load system dependencies configuration from YAML"""
+        config_file = self.opskit_root / 'config' / 'dependencies.yaml'
+        
+        if not config_file.exists():
+            if self.debug:
+                print(f"Dependencies config not found: {config_file}")
+            return {}
+        
+        try:
+            with open(config_file, 'r', encoding='utf-8') as f:
+                config = yaml.safe_load(f)
+            return config or {}
+        except Exception as e:
+            if self.debug:
+                print(f"Failed to load dependencies config: {e}")
+            return {}
     
     def ensure_tool_dependencies(self, tool_info: Dict) -> Tuple[bool, str]:
         """
@@ -54,10 +76,13 @@ class DependencyManager:
                 if not success:
                     return False, f"Python dependencies failed: {message}"
             
-            # Check system dependencies (basic detection)
+            # Check and install system dependencies
             missing_deps = self._check_system_dependencies(tool_info)
             if missing_deps:
-                return False, f"Missing system dependencies: {', '.join(missing_deps)}"
+                # Try to install missing dependencies
+                installed, failed = self._install_system_dependencies(missing_deps)
+                if failed:
+                    return False, f"Missing system dependencies: {', '.join(failed)}"
             
             return True, "All dependencies satisfied"
         
@@ -124,35 +149,143 @@ class DependencyManager:
             return False, f"Failed to setup Python environment: {e}"
     
     def _check_system_dependencies(self, tool_info: Dict) -> List[str]:
-        """Check for missing system dependencies"""
-        missing = []
+        """Check for missing system dependencies specific to this tool"""
+        missing_deps = []
         tool_path = Path(tool_info['path'])
         
-        # Basic dependency detection from main file
+        # First check for tool-specific dependency file
+        deps_file = tool_path / 'system_deps.txt'
+        if deps_file.exists():
+            try:
+                with open(deps_file, 'r', encoding='utf-8') as f:
+                    required_deps = [line.strip() for line in f.readlines() 
+                                   if line.strip() and not line.startswith('#')]
+                return [dep for dep in required_deps 
+                       if not self._is_dependency_satisfied(dep)]
+            except Exception:
+                pass
+        
+        # Fallback: analyze tool content for specific dependencies
+        if not self.dependencies_config:
+            return missing_deps
+            
         main_file = tool_path / tool_info['main_file']
         if not main_file.exists():
-            return []
+            return missing_deps
         
         try:
             with open(main_file, 'r', encoding='utf-8') as f:
-                content = f.read()
+                content = f.read().lower()
             
-            # Common system commands to check
-            common_commands = [
-                'mysql', 'mysqldump', 'psql', 'pg_dump',
-                'git', 'curl', 'wget', 'jq', 'docker',
-                'ssh', 'scp', 'rsync', 'tar', 'gzip'
-            ]
+            system_deps = self.dependencies_config.get('system_dependencies', {})
             
-            for cmd in common_commands:
-                # Simple check if command is mentioned in the file
-                if cmd in content and not self.platform_utils.command_exists(cmd):
-                    missing.append(cmd)
+            # Only check dependencies whose commands appear in the tool's content
+            for dep_name, dep_config in system_deps.items():
+                commands = dep_config.get('commands', [])
+                if commands:
+                    # Check if any command from this dependency appears in the tool content
+                    if any(cmd in content for cmd in commands):
+                        # Check if the dependency is actually missing
+                        if not self._is_dependency_satisfied(dep_name):
+                            missing_deps.append(dep_name)
         
         except Exception:
-            pass  # Ignore errors in basic dependency detection
+            pass
         
-        return missing
+        return missing_deps
+    
+    def _is_dependency_satisfied(self, dep_name: str) -> bool:
+        """Check if a dependency is satisfied"""
+        if not self.dependencies_config:
+            return True
+            
+        system_deps = self.dependencies_config.get('system_dependencies', {})
+        dep_config = system_deps.get(dep_name, {})
+        commands = dep_config.get('commands', [])
+        
+        if not commands:
+            return True
+        
+        # Dependency is satisfied if ALL required commands exist
+        return all(self.platform_utils.command_exists(cmd) for cmd in commands)
+    
+    def _install_system_dependencies(self, missing_deps: List[str]) -> Tuple[List[str], List[str]]:
+        """Install missing system dependencies"""
+        if not missing_deps or not self.dependencies_config:
+            return [], missing_deps
+        
+        settings = self.dependencies_config.get('settings', {})
+        auto_install = settings.get('auto_install', False)
+        
+        if not auto_install:
+            self._show_install_guidance(missing_deps)
+            return [], missing_deps
+        
+        installed, failed = [], []
+        for dep_name in missing_deps:
+            if self._install_dependency(dep_name):
+                installed.append(dep_name)
+            else:
+                failed.append(dep_name)
+        
+        return installed, failed
+    
+    def _install_dependency(self, dep_name: str) -> bool:
+        """Install a single dependency"""
+        system_deps = self.dependencies_config.get('system_dependencies', {})
+        dep_config = system_deps.get(dep_name, {})
+        
+        if not dep_config:
+            return False
+        
+        # Get package name for current platform
+        packages = dep_config.get('packages', {})
+        os_type = self.platform_utils.get_os_type()
+        
+        if os_type == 'linux':
+            distro = self.platform_utils.get_linux_distribution()
+            package_name = packages.get(distro)
+        elif os_type == 'darwin':
+            package_name = packages.get('macos')
+        else:
+            package_name = packages.get(os_type)
+        
+        if not package_name:
+            return False
+        
+        success, _ = self.platform_utils.install_system_package(package_name)
+        return success
+    
+    def _show_install_guidance(self, missing_deps: List[str]):
+        """Show installation guidance"""
+        if not missing_deps:
+            return
+        
+        print(f"\nError: Missing system dependencies: {', '.join(missing_deps)}")
+        print("\nTo install the required dependencies:")
+        
+        system_deps = self.dependencies_config.get('system_dependencies', {})
+        os_type = self.platform_utils.get_os_type()
+        pm = self.platform_utils.get_preferred_package_manager()
+        
+        for dep_name in missing_deps:
+            dep_config = system_deps.get(dep_name, {})
+            packages = dep_config.get('packages', {})
+            
+            if os_type == 'linux':
+                distro = self.platform_utils.get_linux_distribution()
+                package = packages.get(distro)
+            elif os_type == 'darwin':
+                package = packages.get('macos')
+            else:
+                package = packages.get(os_type)
+            
+            if package and pm:
+                managers = self.platform_utils.PACKAGE_MANAGERS.get(os_type, {})
+                pm_config = managers.get(pm, {})
+                install_cmd = pm_config.get('install', '').format(package)
+                if install_cmd:
+                    print(f"  {install_cmd}")
     
     def get_tool_python_executable(self, tool_name: str) -> Optional[Path]:
         """Get Python executable for a tool's virtual environment"""

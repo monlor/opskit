@@ -383,6 +383,50 @@ class ToolError(OpsKitError):
 - **CentOS**: 7, 8
 - **Arch Linux**: 最新版
 
+## 测试命令
+
+### 核心功能测试
+```bash
+# 测试工具列表
+./opskit list
+
+# 测试依赖管理 (应显示安装指导)
+./opskit run mysql-sync
+
+# 测试系统信息
+./opskit run system-info
+
+# 测试帮助系统
+./opskit help
+./opskit help mysql-sync
+```
+
+### 依赖管理测试
+```bash
+# 测试依赖检测 (不安装依赖，仅显示指导)
+./opskit run mysql-sync  # 应显示 mysql-client 安装命令
+
+# 启用自动安装 (需要修改 config/dependencies.yaml)
+# auto_install: true
+./opskit run mysql-sync  # 应自动安装依赖后运行
+```
+
+### 工具特定测试
+```bash
+# MySQL 同步工具
+./opskit run mysql-sync        # 交互模式
+./opskit run mysql-sync history # 查看历史
+
+# 端口扫描工具  
+./opskit run port-scanner
+
+# 磁盘使用分析
+./opskit run disk-usage
+
+# Kubernetes 资源复制
+./opskit run k8s-resource-copy
+```
+
 ## 性能要求
 
 ### 响应时间

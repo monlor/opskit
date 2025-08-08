@@ -13,7 +13,6 @@ system_dependencies:
       fedora: mysql
       arch: mysql
       macos: mysql-client
-      macos_homebrew: mysql-client
     commands: [mysql, mysqldump]
     
   postgresql-client:
@@ -26,7 +25,6 @@ system_dependencies:
       fedora: postgresql
       arch: postgresql
       macos: postgresql
-      macos_homebrew: postgresql
     commands: [psql, pg_dump]
     
   network-tools:
@@ -39,7 +37,6 @@ system_dependencies:
       fedora: net-tools
       arch: net-tools
       macos: null  # Built-in
-      macos_homebrew: null
     commands: [netstat, ss, ping]
     
   nmap:
@@ -52,7 +49,6 @@ system_dependencies:
       fedora: nmap
       arch: nmap
       macos: nmap
-      macos_homebrew: nmap
     commands: [nmap]
     
   git:
@@ -65,7 +61,6 @@ system_dependencies:
       fedora: git
       arch: git
       macos: git
-      macos_homebrew: git
     commands: [git]
     
   curl:
@@ -78,7 +73,6 @@ system_dependencies:
       fedora: curl
       arch: curl
       macos: null  # Built-in
-      macos_homebrew: null
     commands: [curl]
     
   jq:
@@ -91,7 +85,6 @@ system_dependencies:
       fedora: jq
       arch: jq
       macos: jq
-      macos_homebrew: jq
     commands: [jq]
     
   docker:
@@ -104,7 +97,6 @@ system_dependencies:
       fedora: docker
       arch: docker
       macos: docker  # Docker Desktop
-      macos_homebrew: docker
     commands: [docker]
     
   kubectl:
@@ -117,7 +109,6 @@ system_dependencies:
       fedora: kubectl
       arch: kubectl
       macos: kubectl
-      macos_homebrew: kubectl
     commands: [kubectl]
     install_notes:
       ubuntu: "curl -s https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key add -"
@@ -126,8 +117,7 @@ system_dependencies:
       rhel: "curl -LO https://storage.googleapis.com/kubernetes-release/release/$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)/bin/linux/amd64/kubectl"
       fedora: "sudo dnf install -y kubectl"
       arch: "sudo pacman -S kubectl"
-      macos: "curl -LO https://storage.googleapis.com/kubernetes-release/release/$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)/bin/darwin/amd64/kubectl"
-      macos_homebrew: "brew install kubectl"
+      macos: "brew install kubectl"
       
   krew:
     description: kubectl plugin manager (optional but recommended)
@@ -139,7 +129,6 @@ system_dependencies:
       fedora: null
       arch: null
       macos: null
-      macos_homebrew: null
     commands: [kubectl-krew]
     install_notes:
       all: "Install via: (set -x; cd \"$(mktemp -d)\" && OS=\"$(uname | tr '[:upper:]' '[:lower:]')\" && ARCH=\"$(uname -m | sed -e 's/x86_64/amd64/' -e 's/\\(arm\\)\\(64\\)\\?.*/\\1\\2/' -e 's/aarch64$/arm64/')\" && KREW=\"krew-${OS}_${ARCH}\" && curl -fsSLO \"https://github.com/kubernetes-sigs/krew/releases/latest/download/${KREW}.tar.gz\" && tar zxvf \"${KREW}.tar.gz\" && ./${KREW} install krew)"
@@ -157,6 +146,6 @@ package_managers:
 
 # 全局设置
 settings:
-  auto_install: false  # 是否自动安装系统依赖（默认仅提示）
+  auto_install: true  # 是否自动安装系统依赖（默认仅提示）
   check_commands: true  # 检查命令是否可用
   suggest_install: true  # 提供安装建议

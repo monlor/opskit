@@ -28,6 +28,13 @@ tools:
       description: Disk usage analysis tool with configurable thresholds, multiple output formats, and environment-based configuration
       keywords: [disk, usage, storage, filesystem, monitoring]
       # 无额外系统依赖，使用 Shell 内置命令
+      
+  cloudnative:
+    k8s-resource-copy:
+      version: "1.0.0"
+      description: Copy Kubernetes resources between clusters and namespaces with automatic relationship detection and kubectl neat integration
+      keywords: [kubernetes, k8s, resource, copy, migration, cluster, namespace, kubectl]
+      dependencies: [kubectl, krew]  # kubectl 必需，krew 可选但推荐
 
 # 工具类别定义
 categories:
@@ -50,6 +57,11 @@ categories:
     name: Monitoring Tools
     description: Performance monitoring, alerting and observability tools
     icon: 📊
+    
+  cloudnative:
+    name: Cloud Native Tools
+    description: Kubernetes, Docker, and cloud-native platform management tools
+    icon: ☁️
 
 # 全局配置
 global:

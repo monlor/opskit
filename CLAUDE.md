@@ -276,13 +276,14 @@ OpsKit 采用数据分离架构，确保用户数据与代码库分离：
 ```yaml
 data/:           # 用户持久化数据 (Git 忽略)
   - opskit.yaml  # 主配置文件
+  - .env         # 全局变量文件
   - storage.db   # SQLite 数据库
-  - *.yaml       # 工具配置文件 (按需)
 
 cache/:          # 临时缓存数据 (Git 忽略)
   - venvs/       # Python 虚拟环境
   - downloads/   # 下载缓存
   - pip_cache/   # Pip 缓存
+  - tools/       # 工具临时目录
 
 logs/:           # 日志文件 (Git 忽略)
   - opskit.log   # 主应用日志
@@ -298,8 +299,8 @@ logs/:           # 日志文件 (Git 忽略)
 
 ### 配置层次结构
 1. **全局配置**: `data/opskit.yaml`
-2. **工具配置**: `data/tool-name.yaml` (按需创建)
-3. **默认配置**: `config/*.yaml.template`
+2. **全局变量**: `data/.env` (按需创建)
+3. **存储DB**: `data/storage.db`
 
 ### 配置文件格式
 ```yaml

@@ -106,6 +106,43 @@ system_dependencies:
       macos: docker  # Docker Desktop
       macos_homebrew: docker
     commands: [docker]
+    
+  kubectl:
+    description: Kubernetes command-line tool
+    packages:
+      ubuntu: kubectl  # 需要先添加 Kubernetes APT repository
+      debian: kubectl
+      centos: kubectl  # 需要先添加 Kubernetes YUM repository
+      rhel: kubectl
+      fedora: kubectl
+      arch: kubectl
+      macos: kubectl
+      macos_homebrew: kubectl
+    commands: [kubectl]
+    install_notes:
+      ubuntu: "curl -s https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key add -"
+      debian: "curl -s https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key add -"
+      centos: "curl -LO https://storage.googleapis.com/kubernetes-release/release/$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)/bin/linux/amd64/kubectl"
+      rhel: "curl -LO https://storage.googleapis.com/kubernetes-release/release/$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)/bin/linux/amd64/kubectl"
+      fedora: "sudo dnf install -y kubectl"
+      arch: "sudo pacman -S kubectl"
+      macos: "curl -LO https://storage.googleapis.com/kubernetes-release/release/$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)/bin/darwin/amd64/kubectl"
+      macos_homebrew: "brew install kubectl"
+      
+  krew:
+    description: kubectl plugin manager (optional but recommended)
+    packages:
+      ubuntu: null  # Manual installation required
+      debian: null
+      centos: null
+      rhel: null
+      fedora: null
+      arch: null
+      macos: null
+      macos_homebrew: null
+    commands: [kubectl-krew]
+    install_notes:
+      all: "Install via: (set -x; cd \"$(mktemp -d)\" && OS=\"$(uname | tr '[:upper:]' '[:lower:]')\" && ARCH=\"$(uname -m | sed -e 's/x86_64/amd64/' -e 's/\\(arm\\)\\(64\\)\\?.*/\\1\\2/' -e 's/aarch64$/arm64/')\" && KREW=\"krew-${OS}_${ARCH}\" && curl -fsSLO \"https://github.com/kubernetes-sigs/krew/releases/latest/download/${KREW}.tar.gz\" && tar zxvf \"${KREW}.tar.gz\" && ./${KREW} install krew)"
 
 # 包管理器检测顺序
 package_managers:

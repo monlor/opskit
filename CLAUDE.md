@@ -327,8 +327,13 @@ platforms:
   preferred_package_manager: auto  # auto, brew, apt, yum, etc.
 
 paths:
-  cache_dir: /path/to/opskit/cache
-  logs_dir: /path/to/opskit/logs
+  cache_dir: cache                  # 默认为相对于项目根目录的 cache 文件夹
+  logs_dir: logs                    # 默认为相对于项目根目录的 logs 文件夹
+  
+  # 路径规则:
+  # - 相对路径: 基于 OpsKit 项目根目录
+  # - 绝对路径: 直接使用指定路径
+  # - 工具临时目录: 自动在 cache_dir/tools/ 下创建
 ```
 
 ## 错误处理和日志

@@ -169,6 +169,32 @@ class MyTool:
         # self.version = "2.0.0"  # ❌ 错误
 ```
 
+### 临时文件目录环境变量
+
+#### OPSKIT_TOOL_TEMP_DIR
+
+OpsKit 为每个工具提供一个独立的临时目录，通过 `OPSKIT_TOOL_TEMP_DIR` 环境变量指定。
+
+```python
+from utils import get_env_var
+
+# 获取工具专属临时目录
+temp_dir = get_env_var('OPSKIT_TOOL_TEMP_DIR')
+
+# 在临时目录创建文件（安全使用）
+if temp_dir:
+    temp_file_path = os.path.join(temp_dir, 'my_temp_file.txt')
+    with open(temp_file_path, 'w') as f:
+        f.write('Temporary data')
+```
+
+**重要特点**：
+- 每个工具运行时都有独立的临时目录
+- 目录由 OpsKit 框架自动创建和管理
+- 使用 `get_env_var('OPSKIT_TOOL_TEMP_DIR')` 获取
+- 不保证目录在工具运行后自动清理
+- 不要存储敏感或需要长期保存的数据
+
 
 ## 工具模板
 ```python

@@ -46,6 +46,7 @@ except ImportError:
 from .env_manager import EnvManager
 from .platform_utils import PlatformUtils
 from .dependency_manager import DependencyManager
+from .config_manager import ConfigManager
 import yaml
 
 
@@ -68,6 +69,7 @@ class OpsKitCLI:
         self._yaml_tools = None
         
         # Initialize managers
+        self.config_manager = ConfigManager(self.opskit_root)
         self.env_manager = EnvManager(str(self.opskit_root))
         self.platform_utils = PlatformUtils()
         self.dependency_manager = DependencyManager(self.opskit_root, debug=debug)
@@ -739,7 +741,13 @@ class OpsKitCLI:
         try:
             # 1. Inject environment variables
             tool_path = found_tool['path']
+            
+            # Create tool-specific temporary directory
+            tool_temp_dir = self.config_manager.get_tool_temp_dir(found_tool['name'])
+            
+            # Inject environment variables with tool temp dir
             env_vars = self.env_manager.inject_env_vars(tool_path)
+            env_vars['OPSKIT_TOOL_TEMP_DIR'] = tool_temp_dir
             
             if self.debug and env_vars:
                 self._print(f"Debug: Loaded {len(env_vars)} environment variables", "cyan")

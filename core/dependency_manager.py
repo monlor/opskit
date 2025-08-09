@@ -117,9 +117,32 @@ class DependencyManager:
             if not pip_exe.exists():
                 return False, f"pip not found in virtual environment: {pip_exe}"
             
-            # Install requirements
+            # Install core requirements first (needed for common libraries)
+            core_requirements = self.opskit_root / 'requirements.txt'
+            if core_requirements.exists():
+                if self.debug:
+                    print(f"Installing core requirements for {tool_name}...")
+                
+                cmd = [
+                    str(pip_exe), 'install',
+                    '--cache-dir', str(self.pip_cache_dir),
+                    '--requirement', str(core_requirements),
+                    '--quiet'
+                ]
+                
+                result = subprocess.run(
+                    cmd,
+                    capture_output=True,
+                    text=True,
+                    timeout=300  # 5 minute timeout
+                )
+                
+                if result.returncode != 0:
+                    return False, f"Core requirements install failed: {result.stderr}"
+            
+            # Install tool-specific requirements
             if self.debug:
-                print(f"Installing requirements for {tool_name}...")
+                print(f"Installing tool requirements for {tool_name}...")
             
             cmd = [
                 str(pip_exe), 'install',
@@ -136,7 +159,7 @@ class DependencyManager:
             )
             
             if result.returncode != 0:
-                return False, f"pip install failed: {result.stderr}"
+                return False, f"Tool requirements install failed: {result.stderr}"
             
             if self.debug:
                 print(f"Dependencies installed successfully for {tool_name}")

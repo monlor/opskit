@@ -37,7 +37,7 @@ tools/category/tool-name/
 ```python
 import sys
 import os
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../../../common/python'))
+sys.path.insert(0, os.path.join(os.environ['OPSKIT_BASE_PATH'], 'common/python'))
 
 from logger import get_logger
 from storage import get_storage
@@ -105,7 +105,7 @@ self.timeout = get_env_var('TIMEOUT', 30, int)
 from ..common.python.logger import get_logger
 
 # ✅ 正确
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../../../common/python'))
+sys.path.insert(0, os.path.join(os.environ['OPSKIT_BASE_PATH'], 'common/python'))
 from logger import get_logger
 ```
 
@@ -210,7 +210,7 @@ from typing import Dict, List, Optional
 from pathlib import Path
 
 # Import OpsKit common libraries
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../../../common/python'))
+sys.path.insert(0, os.path.join(os.environ['OPSKIT_BASE_PATH'], 'common/python'))
 
 from logger import get_logger
 from storage import get_storage

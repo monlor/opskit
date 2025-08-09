@@ -12,7 +12,6 @@ __version__ = "0.1.0"
 __all__ = [
     'get_logger',
     'get_storage', 
-    'load_config',
     'save_config',
     'setup_logging'
 ]
@@ -20,4 +19,3 @@ __all__ = [
 # Import commonly used functions for easy access
 from .logger import get_logger, setup_logging
 from .storage import get_storage
-from .utils import load_config, save_config

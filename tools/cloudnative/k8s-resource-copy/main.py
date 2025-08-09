@@ -15,7 +15,7 @@ import tempfile
 from dataclasses import dataclass
 
 # Import OpsKit common libraries
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../../../common/python'))
+sys.path.insert(0, os.path.join(os.environ['OPSKIT_BASE_PATH'], 'common/python'))
 
 from logger import get_logger
 from storage import get_storage

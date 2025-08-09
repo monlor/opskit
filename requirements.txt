@@ -8,8 +8,8 @@ PyYAML>=6.0
 click>=8.0.0
 colorama>=0.4.4
 
-# Configuration and data persistence
-configparser>=5.0.0
+# Environment variable management
+python-dotenv>=1.0.0
 
 # System information and platform detection
 psutil>=5.8.0

@@ -1,50 +1,34 @@
 #!/bin/bash
-"""
-Disk Usage Analysis Tool
-Displays disk usage information with configurable thresholds and formatting.
-All configuration is loaded from environment variables.
-"""
 
-# Colors for output (if enabled)
-if [[ "${USE_COLORS:-true}" == "true" ]]; then
-    RED='\033[0;31m'
-    YELLOW='\033[1;33m'
-    GREEN='\033[0;32m'
-    BLUE='\033[0;34m'
-    BOLD='\033[1m'
-    NC='\033[0m' # No Color
-else
-    RED=''
-    YELLOW=''
-    GREEN=''
-    BLUE=''
-    BOLD=''
-    NC=''
-fi
+# Disk Usage Analysis Tool
+# Displays disk usage information with configurable thresholds and formatting.
+# All configuration is loaded from environment variables.
 
-# Tool information
-TOOL_NAME="Disk Usage Analyzer"
-TOOL_VERSION="${VERSION:-1.0.0}"
+# Load OpsKit common shell libraries
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "${OPSKIT_BASE_PATH}/common/shell/logger.sh"
+source "${OPSKIT_BASE_PATH}/common/shell/utils.sh"
 
-# Load configuration from environment variables with defaults
-SHOW_PERCENTAGE="${SHOW_PERCENTAGE:-true}"
-SHOW_HUMAN_READABLE="${SHOW_HUMAN_READABLE:-true}"
-SHOW_FILESYSTEM_TYPE="${SHOW_FILESYSTEM_TYPE:-false}"
-SORT_BY_USAGE="${SORT_BY_USAGE:-true}"
-WARNING_THRESHOLD="${WARNING_THRESHOLD:-80}"
-CRITICAL_THRESHOLD="${CRITICAL_THRESHOLD:-95}"
-ALERT_ON_THRESHOLD="${ALERT_ON_THRESHOLD:-true}"
-OUTPUT_FORMAT="${OUTPUT_FORMAT:-table}"
-SHOW_HEADER="${SHOW_HEADER:-true}"
-MAX_ENTRIES="${MAX_ENTRIES:-20}"
-TIMEOUT="${TIMEOUT:-10}"
-EXCLUDE_TMPFS="${EXCLUDE_TMPFS:-true}"
-EXCLUDE_PROC="${EXCLUDE_PROC:-true}"
+# Tool information will be injected by cli.py
+# TOOL_NAME and TOOL_VERSION are provided by the framework
+
+# Load configuration from environment variables with defaults using utils
+SHOW_PERCENTAGE=$(get_env_var "SHOW_PERCENTAGE" "true" "bool")
+SHOW_HUMAN_READABLE=$(get_env_var "SHOW_HUMAN_READABLE" "true" "bool")
+SHOW_FILESYSTEM_TYPE=$(get_env_var "SHOW_FILESYSTEM_TYPE" "false" "bool")
+SORT_BY_USAGE=$(get_env_var "SORT_BY_USAGE" "true" "bool")
+WARNING_THRESHOLD=$(get_env_var "WARNING_THRESHOLD" "80" "int")
+CRITICAL_THRESHOLD=$(get_env_var "CRITICAL_THRESHOLD" "95" "int")
+ALERT_ON_THRESHOLD=$(get_env_var "ALERT_ON_THRESHOLD" "true" "bool")
+OUTPUT_FORMAT=$(get_env_var "OUTPUT_FORMAT" "table" "str")
+SHOW_HEADER=$(get_env_var "SHOW_HEADER" "true" "bool")
+MAX_ENTRIES=$(get_env_var "MAX_ENTRIES" "20" "int")
+TIMEOUT=$(get_env_var "TIMEOUT" "10" "int")
+EXCLUDE_TMPFS=$(get_env_var "EXCLUDE_TMPFS" "true" "bool")
+EXCLUDE_PROC=$(get_env_var "EXCLUDE_PROC" "true" "bool")
 
 print_header() {
-    echo -e "${BLUE}${BOLD}=== ${TOOL_NAME} v${TOOL_VERSION} ===${NC}"
-    echo -e "${BLUE}Environment-based disk usage monitoring tool${NC}"
-    echo ""
+    show_tool_info "$TOOL_NAME" "$TOOL_VERSION" "Environment-based disk usage monitoring tool"
 }
 
 get_disk_usage() {
@@ -63,7 +47,7 @@ get_disk_usage() {
     # Get disk usage data
     local df_output
     if ! df_output=$(timeout "$TIMEOUT" df $df_options 2>/dev/null); then
-        echo -e "${RED}Error: Failed to get disk usage information${NC}" >&2
+        step_error "get_disk_usage" "Failed to get disk usage information"
         return 1
     fi
     
@@ -110,9 +94,9 @@ check_thresholds() {
     
     if [[ -n "$usage" && "$usage" =~ ^[0-9]+$ ]]; then
         if [[ $usage -ge $CRITICAL_THRESHOLD ]]; then
-            echo -e "${RED}${BOLD}CRITICAL: $mount is ${usage}% full${NC}" >&2
+            log_error "CRITICAL: $mount is ${usage}% full"
         elif [[ $usage -ge $WARNING_THRESHOLD ]]; then
-            echo -e "${YELLOW}${BOLD}WARNING: $mount is ${usage}% full${NC}" >&2
+            log_warn "WARNING: $mount is ${usage}% full"
         fi
     fi
 }
@@ -237,33 +221,38 @@ format_csv() {
 }
 
 main() {
+    # Start tool execution
+    tool_start "$TOOL_NAME"
+    
     print_header
     
     # Debug output if enabled
-    if [[ "${DEBUG:-false}" == "true" ]]; then
-        echo -e "${BLUE}Debug: Configuration loaded${NC}"
-        echo "  WARNING_THRESHOLD=$WARNING_THRESHOLD"
-        echo "  CRITICAL_THRESHOLD=$CRITICAL_THRESHOLD"
-        echo "  OUTPUT_FORMAT=$OUTPUT_FORMAT"
-        echo "  TIMEOUT=$TIMEOUT"
-        echo ""
-    fi
+    log_debug "Configuration loaded:"
+    log_debug "  WARNING_THRESHOLD=$WARNING_THRESHOLD"
+    log_debug "  CRITICAL_THRESHOLD=$CRITICAL_THRESHOLD"
+    log_debug "  OUTPUT_FORMAT=$OUTPUT_FORMAT"
+    log_debug "  TIMEOUT=$TIMEOUT"
     
     # Get disk usage information
+    step_start "Getting disk usage information"
     local disk_data
     if ! disk_data=$(get_disk_usage); then
+        tool_error "$TOOL_NAME" "Failed to get disk usage data"
         exit 1
     fi
+    step_complete "Getting disk usage information"
     
     # Format and display output
+    step_start "Formatting and displaying output"
     format_output "$disk_data"
+    step_complete "Formatting and displaying output"
     
-    echo ""
-    echo -e "${GREEN}✅ Disk usage analysis completed${NC}"
+    # Tool completion
+    tool_complete "$TOOL_NAME"
 }
 
 # Handle help flag
-if [[ "$1" == "--help" || "$1" == "-h" ]]; then
+if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
     echo "Usage: $0 [options]"
     echo ""
     echo "Environment Variables:"

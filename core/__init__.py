@@ -12,8 +12,8 @@ This package contains the core functionality of OpsKit including:
 __version__ = "0.1.0"
 __all__ = [
     'OpsKitCLI',
-    'ConfigManager', 
     'PluginManager',
     'DependencyManager',
-    'PlatformUtils'
+    'PlatformUtils',
+    'env'
 ]

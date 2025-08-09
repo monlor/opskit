@@ -164,11 +164,10 @@ tools/category/tool-name/
 # 导入公共库
 import sys
 import os
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../../../common/python'))
+sys.path.insert(0, os.path.join(os.environ['OPSKIT_BASE_PATH'], 'common/python'))
 
 from logger import get_logger
 from storage import get_storage
-from utils import load_config
 
 # 使用统一日志
 logger = get_logger(__name__)
@@ -178,8 +177,6 @@ logger.info("工具启动")
 storage = get_storage("tool_name")
 storage.set("key", "value")
 
-# 加载配置
-config = load_config("tool_name")
 ```
 
 **Shell 工具**:
@@ -187,8 +184,8 @@ config = load_config("tool_name")
 #!/bin/bash
 
 # 导入公共库
-source "$(dirname "$0")/../../../common/shell/common.sh"
-source "$(dirname "$0")/../../../common/shell/logger.sh"
+source "${OPSKIT_BASE_PATH}/common/shell/logger.sh"
+source "${OPSKIT_BASE_PATH}/common/shell/utils.sh"
 
 # 使用统一日志
 log_info "工具启动"

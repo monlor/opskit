@@ -16,6 +16,14 @@ from pathlib import Path
 from typing import Optional, Dict, Any
 from datetime import datetime
 
+# Import OpsKit environment configuration using OPSKIT_BASE_PATH
+if 'OPSKIT_BASE_PATH' in os.environ:
+    sys.path.insert(0, os.environ['OPSKIT_BASE_PATH'])
+    from core.env import env
+    env_available = True
+else:
+    env_available = False
+
 try:
     import colorama
     from colorama import Fore, Style
@@ -57,29 +65,48 @@ class OpsKitLogger:
     _log_dir: Optional[Path] = None
     
     @classmethod
+    def _parse_size(cls, size_str: str) -> int:
+        """Parse size string like '10MB' to bytes"""
+        size_str = size_str.upper().strip()
+        multipliers = {
+            'B': 1,
+            'KB': 1024,
+            'MB': 1024 * 1024,
+            'GB': 1024 * 1024 * 1024
+        }
+        
+        for suffix, multiplier in multipliers.items():
+            if size_str.endswith(suffix):
+                number_str = size_str[:-len(suffix)].strip()
+                try:
+                    return int(float(number_str) * multiplier)
+                except ValueError:
+                    pass
+        
+        # Default to 10MB if parsing fails
+        return 10 * 1024 * 1024
+    
+    @classmethod
     def initialize(cls, log_dir: Optional[str] = None, 
-                  console_level: str = 'INFO',
-                  file_level: str = 'DEBUG',
-                  console_simple_format: bool = True) -> None:
-        """Initialize the logging system"""
+                  console_level: Optional[str] = None,
+                  file_level: Optional[str] = None,
+                  console_simple_format: Optional[bool] = None,
+                  file_enabled: Optional[bool] = None) -> None:
+        """Initialize the logging system with environment variable support"""
         if cls._initialized:
             return
         
         # Set log directory
-        if log_dir:
-            cls._log_dir = Path(log_dir)
-        else:
-            # Auto-detect OpsKit root and set log directory
-            current_file = Path(__file__).resolve()
-            opskit_root = current_file.parent.parent.parent
-            cls._log_dir = opskit_root / 'logs'
-        
+        cls._log_dir = Path(log_dir) if log_dir else Path(env.logs_dir)
         cls._log_dir.mkdir(parents=True, exist_ok=True)
         
-        # Set default levels
-        cls._console_level = getattr(logging, console_level.upper())
-        cls._file_level = getattr(logging, file_level.upper())
-        cls._console_simple_format = console_simple_format
+        # Set configuration from environment variables
+        cls._console_level = getattr(logging, (console_level or env.log_level).upper())
+        cls._file_level = getattr(logging, (file_level or env.log_file_level).upper())
+        cls._console_simple_format = (console_simple_format 
+            if console_simple_format is not None else env.log_simple_format)
+        cls._file_enabled = (file_enabled 
+            if file_enabled is not None else env.log_file_enabled)
         
         cls._initialized = True
     
@@ -128,33 +155,39 @@ class OpsKitLogger:
         console_handler.setFormatter(console_formatter)
         logger.addHandler(console_handler)
         
-        # File handler for general logs
-        general_log_file = cls._log_dir / 'opskit.log'
-        file_handler = logging.handlers.RotatingFileHandler(
-            general_log_file,
-            maxBytes=10 * 1024 * 1024,  # 10MB
-            backupCount=5,
-            encoding='utf-8'
-        )
-        file_handler.setLevel(cls._file_level)
-        
-        file_format = '%(asctime)s - %(name)s - %(levelname)s - %(filename)s:%(lineno)d - %(message)s'
-        file_formatter = logging.Formatter(file_format)
-        file_handler.setFormatter(file_formatter)
-        logger.addHandler(file_handler)
-        
-        # Tool-specific log file if tool_name provided
-        if tool_name:
-            tool_log_file = cls._log_dir / f'{tool_name}.log'
-            tool_handler = logging.handlers.RotatingFileHandler(
-                tool_log_file,
-                maxBytes=5 * 1024 * 1024,  # 5MB
-                backupCount=3,
+        # File handler for general logs (only if file logging is enabled)
+        if cls._file_enabled:
+            # Parse max file size from environment
+            max_size_str = env.log_max_size if env_available else '10MB'
+            max_size_bytes = cls._parse_size(max_size_str)
+            max_files = env.log_max_files if env_available else 5
+            
+            general_log_file = cls._log_dir / 'opskit.log'
+            file_handler = logging.handlers.RotatingFileHandler(
+                general_log_file,
+                maxBytes=max_size_bytes,
+                backupCount=max_files,
                 encoding='utf-8'
             )
-            tool_handler.setLevel(cls._file_level)
-            tool_handler.setFormatter(file_formatter)
-            logger.addHandler(tool_handler)
+            file_handler.setLevel(cls._file_level)
+            
+            file_format = '%(asctime)s - %(name)s - %(levelname)s - %(filename)s:%(lineno)d - %(message)s'
+            file_formatter = logging.Formatter(file_format)
+            file_handler.setFormatter(file_formatter)
+            logger.addHandler(file_handler)
+            
+            # Tool-specific log file if tool_name provided
+            if tool_name:
+                tool_log_file = cls._log_dir / f'{tool_name}.log'
+                tool_handler = logging.handlers.RotatingFileHandler(
+                    tool_log_file,
+                    maxBytes=max_size_bytes // 2,  # Half size for tool-specific logs
+                    backupCount=3,
+                    encoding='utf-8'
+                )
+                tool_handler.setLevel(cls._file_level)
+                tool_handler.setFormatter(file_formatter)
+                logger.addHandler(tool_handler)
         
         # Prevent propagation to avoid duplicate logs
         logger.propagate = False
@@ -262,28 +295,26 @@ def get_logger(name: str, tool_name: Optional[str] = None) -> logging.Logger:
 
 
 def setup_logging(log_dir: Optional[str] = None,
-                 console_level: str = 'INFO',
-                 file_level: str = 'DEBUG',
-                 console_simple_format: bool = True) -> None:
+                 console_level: Optional[str] = None,
+                 file_level: Optional[str] = None,
+                 console_simple_format: Optional[bool] = None,
+                 file_enabled: Optional[bool] = None) -> None:
     """
-    Initialize the logging system
+    Initialize the logging system with environment variable support
     
     Args:
-        log_dir: Directory for log files (auto-detected if None)
-        console_level: Console logging level
-        file_level: File logging level
-        console_simple_format: Use simple format for console output
+        log_dir: Directory for log files (uses env.logs_dir if None)
+        console_level: Console logging level (uses env.log_level if None)
+        file_level: File logging level (uses env.log_file_level if None)
+        console_simple_format: Use simple format for console output (uses env.log_simple_format if None)
+        file_enabled: Enable file logging (uses env.log_file_enabled if None)
     
     Example:
+        setup_logging()  # Use all environment defaults
         setup_logging(console_level='DEBUG')
-        setup_logging(log_dir='/custom/log/path', console_simple_format=False)
+        setup_logging(log_dir='/custom/log/path', file_enabled=True)
     """
-    # Check environment variable for log level override
-    env_level = os.environ.get('OPSKIT_LOG_LEVEL')
-    if env_level:
-        console_level = env_level
-    
-    OpsKitLogger.initialize(log_dir, console_level, file_level, console_simple_format)
+    OpsKitLogger.initialize(log_dir, console_level, file_level, console_simple_format, file_enabled)
 
 
 def set_log_level(level: str, target: str = 'both') -> None:

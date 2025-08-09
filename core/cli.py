@@ -43,10 +43,9 @@ try:
 except ImportError:
     prompt_toolkit_available = False
 
-from .env_manager import EnvManager
+from .env import env, get_tool_temp_dir, load_tool_env, get_config_summary
 from .platform_utils import PlatformUtils
 from .dependency_manager import DependencyManager
-from .config_manager import ConfigManager
 import yaml
 
 
@@ -69,8 +68,6 @@ class OpsKitCLI:
         self._yaml_tools = None
         
         # Initialize managers
-        self.config_manager = ConfigManager(self.opskit_root)
-        self.env_manager = EnvManager(str(self.opskit_root))
         self.platform_utils = PlatformUtils()
         self.dependency_manager = DependencyManager(self.opskit_root, debug=debug)
     
@@ -219,8 +216,9 @@ class OpsKitCLI:
     def interactive_mode(self) -> None:
         """Enter interactive CLI mode with list view, pagination and real-time search"""
         if not prompt_toolkit_available:
-            self._print("prompt_toolkit is not installed. Please install it for advanced CLI features.", "yellow")
-            return self._fallback_interactive_mode()
+            self._print("Error: prompt_toolkit is required for interactive mode.", "red")
+            self._print("Please install it with: pip install prompt-toolkit", "yellow")
+            return
         
         # Load and prepare tools
         tools = self.discover_tools()
@@ -448,232 +446,6 @@ class OpsKitCLI:
         except KeyboardInterrupt:
             self._print("\nGoodbye!", "green")
     
-    def _fallback_interactive_mode(self) -> None:
-        """Fallback interactive mode without prompt_toolkit"""
-        self._print_panel(
-            "Welcome to OpsKit - Unified Operations Tool Management Platform\n"
-            "Discover, configure, and run operational tools with ease.",
-            "OpsKit Interactive Mode",
-            "green"
-        )
-        
-        while True:
-            try:
-                self._print("\nWhat would you like to do?")
-                self._print("1. List all tools")
-                self._print("2. Browse tools by category")
-                self._print("3. Search tools")
-                self._print("4. Configuration management")
-                self._print("5. System status")
-                self._print("6. Update OpsKit")
-                self._print("7. Help")
-                self._print("0. Exit")
-                
-                choice = self._input("Enter your choice")
-                
-                if choice == '1':
-                    self.list_tools()
-                elif choice == '2':
-                    self._browse_tools_menu()
-                elif choice == '3':
-                    self._search_tools_interactive()
-                elif choice == '4':
-                    self.configuration_menu()
-                elif choice == '5':
-                    self.show_status()
-                elif choice == '6':
-                    self.update_opskit()
-                elif choice == '7':
-                    self._show_help()
-                elif choice == '0':
-                    self._print("Goodbye!", "green")
-                    break
-                else:
-                    self._print("Invalid choice. Please try again.", "yellow")
-            
-            except KeyboardInterrupt:
-                self._print("\nGoodbye!", "green")
-                break
-            except Exception as e:
-                self._print(f"Error: {e}", "red")
-                if self.debug:
-                    import traceback
-                    traceback.print_exc()
-    
-    def _browse_tools_menu(self) -> None:
-        """Browse tools by category"""
-        tools = self.discover_tools()
-        
-        if not tools:
-            self._print("No tools found. Please check your OpsKit installation.", "yellow")
-            return
-        
-        categories = list(tools.keys())
-        
-        while True:
-            self._print("\nAvailable tool categories:")
-            for i, category in enumerate(categories, 1):
-                tool_count = len(tools[category])
-                self._print(f"{i}. {category} ({tool_count} tools)")
-            self._print("0. Back to main menu")
-            
-            choice = self._input("Select a category")
-            
-            if choice == '0':
-                break
-            
-            try:
-                category_index = int(choice) - 1
-                if 0 <= category_index < len(categories):
-                    category = categories[category_index]
-                    self._show_category_tools(category, tools[category])
-                else:
-                    self._print("Invalid selection.", "yellow")
-            except ValueError:
-                self._print("Please enter a number.", "yellow")
-    
-    def _show_category_tools(self, category: str, category_tools: List[Dict[str, str]]) -> None:
-        """Show tools in a specific category"""
-        while True:
-            self._print(f"\nTools in category '{category}':")
-            
-            if rich_available and self.console:
-                table = Table(show_header=True, header_style="bold blue")
-                table.add_column("#", width=3)
-                table.add_column("Name", width=20)
-                table.add_column("Type", width=8)
-                table.add_column("Description")
-                
-                for i, tool in enumerate(category_tools, 1):
-                    table.add_row(
-                        str(i),
-                        tool['name'],
-                        tool['type'],
-                        tool['description'][:80] + ('...' if len(tool['description']) > 80 else '')
-                    )
-                
-                self.console.print(table)
-            else:
-                for i, tool in enumerate(category_tools, 1):
-                    print(f"{i}. {tool['name']} ({tool['type']})")
-                    print(f"   {tool['description']}")
-            
-            self._print("0. Back to categories")
-            
-            choice = self._input("Select a tool to run (or enter tool name)")
-            
-            if choice == '0':
-                break
-            
-            # Try to find tool by number or name
-            selected_tool = None
-            
-            # Try by number first
-            try:
-                tool_index = int(choice) - 1
-                if 0 <= tool_index < len(category_tools):
-                    selected_tool = category_tools[tool_index]
-            except ValueError:
-                # Try by name
-                for tool in category_tools:
-                    if tool['name'].lower() == choice.lower():
-                        selected_tool = tool
-                        break
-            
-            if selected_tool:
-                self._show_tool_details(selected_tool)
-            else:
-                self._print("Tool not found.", "yellow")
-    
-    def _show_tool_details(self, tool: Dict[str, str]) -> None:
-        """Show detailed information about a tool"""
-        self._print_panel(
-            f"Name: {tool['name']}\n"
-            f"Type: {tool['type']}\n"
-            f"Category: {tool['category']}\n"
-            f"Path: {tool['path']}\n"
-            f"Main File: {tool['main_file']}\n"
-            f"Has Dependencies: {'Yes' if tool['has_python_deps'] else 'No'}\n"
-            f"Has Configuration: {'Yes' if tool['has_config'] else 'No'}\n\n"
-            f"Description:\n{tool['description']}",
-            f"Tool Details: {tool['name']}",
-            "blue"
-        )
-        
-        while True:
-            self._print("\nWhat would you like to do?")
-            self._print("1. Run this tool")
-            self._print("2. Configure this tool")
-            self._print("3. Show dependencies")
-            self._print("0. Back")
-            
-            choice = self._input("Enter your choice")
-            
-            if choice == '1':
-                self.run_tool(tool['name'])
-                break
-            elif choice == '2':
-                self.configure_tool(tool['name'])
-                break
-            elif choice == '3':
-                self._show_tool_dependencies(tool)
-            elif choice == '0':
-                break
-            else:
-                self._print("Invalid choice.", "yellow")
-    
-    def _show_tool_dependencies(self, tool: Dict[str, str]) -> None:
-        """Show tool dependencies"""
-        tool_path = Path(tool['path'])
-        
-        # Python dependencies
-        python_deps = []
-        requirements_file = tool_path / 'requirements.txt'
-        if requirements_file.exists():
-            try:
-                with open(requirements_file, 'r') as f:
-                    python_deps = [line.strip() for line in f if line.strip() and not line.startswith('#')]
-            except Exception:
-                pass
-        
-        # System dependencies (basic check)
-        system_deps = []
-        if tool['type'] == 'shell':
-            main_file = tool_path / tool['main_file']
-            if main_file.exists():
-                try:
-                    with open(main_file, 'r') as f:
-                        content = f.read()
-                    
-                    # Look for common commands
-                    common_commands = ['mysql', 'mysqldump', 'git', 'curl', 'wget', 'jq', 'docker']
-                    for cmd in common_commands:
-                        if cmd in content:
-                            system_deps.append(cmd)
-                except Exception:
-                    pass
-        
-        deps_info = f"Tool: {tool['name']}\n\n"
-        
-        if python_deps:
-            deps_info += "Python Dependencies:\n"
-            for dep in python_deps:
-                deps_info += f"  - {dep}\n"
-        else:
-            deps_info += "Python Dependencies: None\n"
-        
-        deps_info += "\n"
-        
-        if system_deps:
-            deps_info += "System Dependencies (detected):\n"
-            for dep in system_deps:
-                available = "✓" if self.platform_utils.command_exists(dep) else "✗"
-                deps_info += f"  {available} {dep}\n"
-        else:
-            deps_info += "System Dependencies: None detected\n"
-        
-        self._print_panel(deps_info, "Dependencies", "yellow")
-    
     def list_tools(self, category: Optional[str] = None) -> None:
         """List all tools or tools in a specific category"""
         tools = self.discover_tools()
@@ -743,11 +515,16 @@ class OpsKitCLI:
             tool_path = found_tool['path']
             
             # Create tool-specific temporary directory
-            tool_temp_dir = self.config_manager.get_tool_temp_dir(found_tool['name'])
+            tool_temp_dir = get_tool_temp_dir(found_tool['name'])
             
-            # Inject environment variables with tool temp dir
-            env_vars = self.env_manager.inject_env_vars(tool_path)
+            # Inject environment variables with tool temp dir and base path
+            env_vars = load_tool_env(tool_path)
             env_vars['OPSKIT_TOOL_TEMP_DIR'] = tool_temp_dir
+            env_vars['OPSKIT_BASE_PATH'] = str(self.opskit_root)
+            
+            # Inject tool metadata for shell tools
+            env_vars['TOOL_NAME'] = found_tool.get('display_name', found_tool['name'])
+            env_vars['TOOL_VERSION'] = tool_version
             
             if self.debug and env_vars:
                 self._print(f"Debug: Loaded {len(env_vars)} environment variables", "cyan")
@@ -758,7 +535,8 @@ class OpsKitCLI:
                 self._print("")
             
             # Set environment variables in current process
-            self.env_manager.set_environment_variables(env_vars)
+            for key, value in env_vars.items():
+                os.environ[key] = str(value)
             
             # 2. Run tool with dependency management
             return self.dependency_manager.run_tool_with_dependencies(found_tool, tool_args)
@@ -769,41 +547,6 @@ class OpsKitCLI:
                 import traceback
                 traceback.print_exc()
             return 1
-    
-    def show_tool_env_config(self, tool_name: str) -> None:
-        """Display environment variable configuration for a tool"""
-        # Find the tool
-        tools = self.discover_tools()
-        found_tool = None
-        
-        for category, cat_tools in tools.items():
-            for tool in cat_tools:
-                if tool['name'] == tool_name:
-                    found_tool = tool
-                    break
-            if found_tool:
-                break
-        
-        if not found_tool:
-            self._print(f"Tool '{tool_name}' not found", "red")
-            return
-        
-        # Get environment configuration summary
-        tool_path = found_tool['path']
-        env_summary = self.env_manager.get_config_summary(tool_path)
-        
-        self._print_panel(
-            f"Tool: {tool_name} v{found_tool.get('version', '1.0.0')}\n"
-            f"Tool Prefix: {env_summary['tool_prefix']}\n"
-            f"Tool Environment Variables: {env_summary['tool_env_count']}\n"
-            f"Global Environment Variables: {env_summary['global_env_count']}\n"
-            f"Total Final Variables: {env_summary['final_env_count']}\n\n"
-            f"Tool .env file: {env_summary['tool_env_file']}\n"
-            f"Global .env file: {env_summary['global_env_file']}\n\n"
-            f"Sample Variables:\n" +
-            '\n'.join([f"  {k}={v}" for k, v in env_summary['sample_vars'].items()]),
-            f"{tool_name} Environment Configuration"
-        )
     
     def search_tools(self, query: str) -> None:
         """Search tools by name or description"""
@@ -844,17 +587,11 @@ class OpsKitCLI:
             for tool in matches:
                 print(f"{tool['name']} ({tool['category']}) - {tool['description']}")
     
-    def _search_tools_interactive(self) -> None:
-        """Interactive tool search"""
-        query = self._input("Enter search query")
-        if query:
-            self.search_tools(query)
-    
     def show_status(self) -> None:
         """Show system status"""
         # Get system information
         system_info = self.platform_utils.get_system_info()
-        config_summary = self.config_manager.get_config_summary()
+        config_summary = get_config_summary()
         tools = self.discover_tools()
         
         status_info = f"OpsKit Status Report\n\n"
@@ -877,11 +614,8 @@ class OpsKitCLI:
     
     def configuration_menu(self) -> None:
         """Configuration management menu"""
-        self._print("Configuration management functionality will be implemented here", "yellow")
-    
-    def configure_tool(self, tool_name: str) -> None:
-        """Configure a specific tool"""
-        self._print(f"Tool configuration for '{tool_name}' will be implemented here", "yellow")
+        self._print("Configuration management is handled through environment variables.", "blue")
+        self._print("Set variables in .env files within tool directories or use system environment variables.", "dim")
     
     def update_opskit(self) -> None:
         """Update OpsKit using git pull"""

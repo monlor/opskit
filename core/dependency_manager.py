@@ -40,6 +40,10 @@ class DependencyManager:
         
         # Load dependency configuration
         self.dependencies_config = self._load_dependencies_config()
+        
+        # Cache for system dependency checks (avoid repeated checks)
+        self._system_deps_cache = {}
+        self._last_cache_time = 0
     
     def _load_dependencies_config(self) -> Dict:
         """Load system dependencies configuration from YAML"""
@@ -105,6 +109,12 @@ class DependencyManager:
                     print(f"Creating virtual environment for {tool_name}...")
                 
                 venv.create(venv_path, with_pip=True, clear=True)
+            else:
+                # Check if dependencies are already satisfied
+                if self._are_python_deps_satisfied(tool_name, requirements_file):
+                    if self.debug:
+                        print(f"Python dependencies already satisfied for {tool_name}")
+                    return True, "Dependencies already installed"
             
             # Get pip executable path
             if os.name == 'nt':  # Windows
@@ -171,6 +181,70 @@ class DependencyManager:
         except Exception as e:
             return False, f"Failed to setup Python environment: {e}"
     
+    def _are_python_deps_satisfied(self, tool_name: str, requirements_file: Path) -> bool:
+        """Check if Python dependencies are already satisfied in virtual environment"""
+        try:
+            python_exe = self.get_tool_python_executable(tool_name)
+            if not python_exe or not python_exe.exists():
+                return False
+            
+            # Use pip list to get all installed packages (more reliable than import checks)
+            cmd = [str(python_exe), '-m', 'pip', 'list', '--format=json']
+            try:
+                result = subprocess.run(
+                    cmd,
+                    capture_output=True,
+                    text=True,
+                    timeout=30
+                )
+                if result.returncode != 0:
+                    return False
+                
+                installed_packages = json.loads(result.stdout)
+                installed_dict = {pkg['name'].lower().replace('-', '_'): pkg['version'] 
+                                for pkg in installed_packages}
+            except Exception as e:
+                if self.debug:
+                    print(f"Failed to get installed packages list: {e}")
+                return False
+            
+            # Parse requirements.txt to get required packages
+            with open(requirements_file, 'r', encoding='utf-8') as f:
+                requirements = []
+                for line in f:
+                    line = line.strip()
+                    if line and not line.startswith('#') and not line.startswith('-') and not line.startswith('http'):
+                        # Extract package name (before version specifiers)
+                        import re
+                        # Split on version specifiers but keep only the package name
+                        pkg_match = re.match(r'^([a-zA-Z0-9_\-\.]+)', line)
+                        if pkg_match:
+                            pkg_name = pkg_match.group(1).lower().replace('-', '_')
+                            requirements.append(pkg_name)
+            
+            if not requirements:
+                return True  # No requirements to check
+            
+            # Check each required package
+            missing_packages = []
+            for pkg_name in requirements:
+                if pkg_name not in installed_dict:
+                    missing_packages.append(pkg_name)
+            
+            if missing_packages:
+                if self.debug:
+                    print(f"Missing packages in venv for {tool_name}: {missing_packages}")
+                return False
+            
+            if self.debug:
+                print(f"All Python dependencies satisfied for {tool_name}")
+            return True
+        
+        except Exception as e:
+            if self.debug:
+                print(f"Error checking Python dependencies: {e}")
+            return False
+    
     def _check_system_dependencies(self, tool_info: Dict) -> List[str]:
         """Check for missing system dependencies specific to this tool"""
         missing_deps = []
@@ -218,19 +292,39 @@ class DependencyManager:
         return missing_deps
     
     def _is_dependency_satisfied(self, dep_name: str) -> bool:
-        """Check if a dependency is satisfied"""
+        """Check if a dependency is satisfied (with caching)"""
         if not self.dependencies_config:
             return True
+        
+        import time
+        current_time = time.time()
+        cache_duration = 300  # 5 minutes cache
+        
+        # Check cache first
+        if (dep_name in self._system_deps_cache and 
+            current_time - self._last_cache_time < cache_duration):
+            if self.debug:
+                print(f"Using cached result for dependency {dep_name}")
+            return self._system_deps_cache[dep_name]
             
         system_deps = self.dependencies_config.get('system_dependencies', {})
         dep_config = system_deps.get(dep_name, {})
         commands = dep_config.get('commands', [])
         
         if not commands:
-            return True
+            result = True
+        else:
+            # Dependency is satisfied if ALL required commands exist
+            result = all(self.platform_utils.command_exists(cmd) for cmd in commands)
         
-        # Dependency is satisfied if ALL required commands exist
-        return all(self.platform_utils.command_exists(cmd) for cmd in commands)
+        # Cache the result
+        self._system_deps_cache[dep_name] = result
+        self._last_cache_time = current_time
+        
+        if self.debug:
+            print(f"Dependency {dep_name}: {'satisfied' if result else 'missing'}")
+        
+        return result
     
     def _install_system_dependencies(self, missing_deps: List[str]) -> Tuple[List[str], List[str]]:
         """Install missing system dependencies"""
@@ -277,6 +371,13 @@ class DependencyManager:
             return False
         
         success, _ = self.platform_utils.install_system_package(package_name)
+        
+        # Clear cache for this dependency if installation was successful
+        if success and dep_name in self._system_deps_cache:
+            del self._system_deps_cache[dep_name]
+            if self.debug:
+                print(f"Cleared cache for {dep_name} after installation")
+        
         return success
     
     def _show_install_guidance(self, missing_deps: List[str]):
@@ -437,3 +538,63 @@ class DependencyManager:
             status['missing_system_deps'] = missing_deps
         
         return status
+    
+    def clear_dependency_cache(self):
+        """Clear the system dependency cache"""
+        self._system_deps_cache.clear()
+        self._last_cache_time = 0
+        if self.debug:
+            print("System dependency cache cleared")
+    
+    def get_cache_status(self) -> Dict:
+        """Get information about the current dependency cache"""
+        import time
+        current_time = time.time()
+        cache_age = current_time - self._last_cache_time if self._last_cache_time > 0 else 0
+        
+        return {
+            'cached_dependencies': list(self._system_deps_cache.keys()),
+            'cache_age_seconds': cache_age,
+            'cache_valid': cache_age < 300  # 5 minutes
+        }
+    
+    def validate_venv_integrity(self, tool_name: str) -> Tuple[bool, str]:
+        """Validate virtual environment integrity and suggest refresh if needed"""
+        venv_path = self.venvs_dir / tool_name
+        
+        if not venv_path.exists():
+            return False, "Virtual environment does not exist"
+        
+        try:
+            python_exe = self.get_tool_python_executable(tool_name)
+            if not python_exe or not python_exe.exists():
+                return False, "Python executable missing in virtual environment"
+            
+            # Check if pip is working
+            cmd = [str(python_exe), '-m', 'pip', '--version']
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=10
+            )
+            
+            if result.returncode != 0:
+                return False, "pip is not working in virtual environment"
+            
+            # Check if basic packages are importable
+            cmd = [str(python_exe), '-c', 'import sys, os, json']
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=10
+            )
+            
+            if result.returncode != 0:
+                return False, "Basic Python modules not importable"
+            
+            return True, "Virtual environment is healthy"
+        
+        except Exception as e:
+            return False, f"Validation failed: {e}"

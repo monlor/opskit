@@ -88,14 +88,19 @@ def main():
     parser.add_argument('--version', '-v', action='store_true', help='Show version')
     parser.add_argument('--debug', action='store_true', help='Enable debug mode')
     
-    args = parser.parse_args()
+    args, unknown_args = parser.parse_known_args()
+    
+    # If we have unknown args and the command is 'run', treat them as tool arguments
+    if args.command == 'run' and unknown_args:
+        args.args.extend(unknown_args)
     
     # Handle version and help flags
     if args.version:
         print_version()
         return
     
-    if args.help:
+    # Only show main help if not running a specific tool
+    if args.help and args.command != 'run':
         print_help()
         return
     

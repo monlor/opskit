@@ -21,6 +21,7 @@ try:
     from rich.text import Text
     from rich.prompt import Prompt, Confirm
     from rich.progress import track
+    from rich.align import Align
     rich_available = True
 except ImportError:
     rich_available = False
@@ -113,6 +114,35 @@ class OpsKitCLI:
             if not result:
                 return default
             return result in ['y', 'yes', '1', 'true']
+    
+    def _print_tool_header(self, tool_name: str, version: str, description: str, tool_type: str, category: str) -> None:
+        """Print a standardized tool header"""
+        if self.console and rich_available:
+            # Rich formatted header
+            # Create header content with tool information
+            header_content = f"[bold blue]{tool_name}[/bold blue] [dim]v{version}[/dim]\n"
+            header_content += f"[dim]{description}[/dim]\n"
+            header_content += f"[yellow]Category:[/yellow] {category.title()}  [yellow]Type:[/yellow] {tool_type.upper()}"
+            
+            # Create panel with header
+            panel = Panel(
+                Align.center(header_content),
+                title="🚀 OpsKit Tool",
+                title_align="left",
+                border_style="green",
+                padding=(1, 2)
+            )
+            self.console.print(panel)
+            self.console.print()  # Add spacing after header
+        else:
+            # Plain text header for non-rich environments
+            separator = "=" * 60
+            self._print(separator)
+            self._print(f"🚀 OpsKit Tool: {tool_name} v{version}")
+            self._print(f"Description: {description}")
+            self._print(f"Category: {category.title()}  |  Type: {tool_type.upper()}")
+            self._print(separator)
+            self._print("")  # Add spacing after header
     
     def discover_tools(self, force_refresh: bool = False) -> Dict[str, List[Dict[str, str]]]:
         """
@@ -506,9 +536,14 @@ class OpsKitCLI:
             self._print(f"Tool '{tool_name}' not found", "red")
             return 1
         
-        # Display tool info with version
+        # Display comprehensive tool header
         tool_version = found_tool.get('version', '1.0.0')
-        self._print(f"🚀 Running {tool_name} v{tool_version}...\n", "green")
+        tool_description = found_tool.get('description', 'No description available')
+        tool_type = found_tool.get('type', 'unknown')
+        tool_category = found_tool.get('category', 'uncategorized')
+        
+        # Print formatted tool header
+        self._print_tool_header(tool_name, tool_version, tool_description, tool_type, tool_category)
         
         try:
             # 1. Inject environment variables

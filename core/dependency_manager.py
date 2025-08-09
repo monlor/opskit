@@ -28,12 +28,13 @@ class DependencyManager:
         self.opskit_root = opskit_root
         self.debug = debug
         self.cache_dir = opskit_root / 'cache'
-        self.venvs_dir = self.cache_dir / 'venvs'
+        self.shared_venv = opskit_root / '.venv'
         self.pip_cache_dir = self.cache_dir / 'pip_cache'
+        self.requirements_cache_dir = self.cache_dir / 'requirements'
         
         # Create directories
-        self.venvs_dir.mkdir(parents=True, exist_ok=True)
         self.pip_cache_dir.mkdir(parents=True, exist_ok=True)
+        self.requirements_cache_dir.mkdir(parents=True, exist_ok=True)
         
         # Platform utilities
         self.platform_utils = PlatformUtils()
@@ -94,70 +95,49 @@ class DependencyManager:
             return False, f"Dependency check failed: {e}"
     
     def _ensure_python_dependencies(self, tool_name: str, tool_path: Path) -> Tuple[bool, str]:
-        """Ensure Python dependencies are installed in virtual environment"""
+        """Ensure Python dependencies are installed in shared virtual environment"""
         requirements_file = tool_path / 'requirements.txt'
         
         if not requirements_file.exists():
             return True, "No requirements.txt found"
         
-        venv_path = self.venvs_dir / tool_name
-        
         try:
-            # Create virtual environment if it doesn't exist
-            if not venv_path.exists():
+            # Create shared virtual environment if it doesn't exist
+            if not self.shared_venv.exists():
                 if self.debug:
-                    print(f"Creating virtual environment for {tool_name}...")
+                    print(f"Creating shared virtual environment...")
                 
-                venv.create(venv_path, with_pip=True, clear=True)
-            else:
-                # Check if dependencies are already satisfied
-                if self._are_python_deps_satisfied(tool_name, requirements_file):
-                    if self.debug:
-                        print(f"Python dependencies already satisfied for {tool_name}")
-                    return True, "Dependencies already installed"
+                venv.create(self.shared_venv, with_pip=True, clear=True)
+                
+                # Upgrade pip in new environment
+                pip_exe = self._get_pip_executable()
+                if pip_exe:
+                    subprocess.run(
+                        [str(pip_exe), 'install', '--upgrade', 'pip'],
+                        capture_output=True,
+                        timeout=60
+                    )
+            
+            # Check if dependencies are already satisfied
+            if self._are_python_deps_satisfied(tool_name, requirements_file):
+                if self.debug:
+                    print(f"Python dependencies already satisfied for {tool_name}")
+                return True, "Dependencies already installed"
             
             # Get pip executable path
-            if os.name == 'nt':  # Windows
-                pip_exe = venv_path / 'Scripts' / 'pip.exe'
-                python_exe = venv_path / 'Scripts' / 'python.exe'
-            else:  # Unix-like
-                pip_exe = venv_path / 'bin' / 'pip'
-                python_exe = venv_path / 'bin' / 'python'
+            pip_exe = self._get_pip_executable()
+            if not pip_exe or not pip_exe.exists():
+                return False, f"pip not found in shared virtual environment: {pip_exe}"
             
-            if not pip_exe.exists():
-                return False, f"pip not found in virtual environment: {pip_exe}"
-            
-            # Install core requirements first (needed for common libraries)
-            core_requirements = self.opskit_root / 'requirements.txt'
-            if core_requirements.exists():
-                if self.debug:
-                    print(f"Installing core requirements for {tool_name}...")
-                
-                cmd = [
-                    str(pip_exe), 'install',
-                    '--cache-dir', str(self.pip_cache_dir),
-                    '--requirement', str(core_requirements),
-                    '--quiet'
-                ]
-                
-                result = subprocess.run(
-                    cmd,
-                    capture_output=True,
-                    text=True,
-                    timeout=300  # 5 minute timeout
-                )
-                
-                if result.returncode != 0:
-                    return False, f"Core requirements install failed: {result.stderr}"
-            
-            # Install tool-specific requirements
+            # Install tool-specific requirements into shared venv
             if self.debug:
-                print(f"Installing tool requirements for {tool_name}...")
+                print(f"Installing tool requirements for {tool_name} into shared venv...")
             
             cmd = [
                 str(pip_exe), 'install',
                 '--cache-dir', str(self.pip_cache_dir),
                 '--requirement', str(requirements_file),
+                '--upgrade',  # Handle version conflicts by upgrading
                 '--quiet'
             ]
             
@@ -171,6 +151,9 @@ class DependencyManager:
             if result.returncode != 0:
                 return False, f"Tool requirements install failed: {result.stderr}"
             
+            # Cache requirements for tracking
+            self._cache_tool_requirements(tool_name, requirements_file)
+            
             if self.debug:
                 print(f"Dependencies installed successfully for {tool_name}")
             
@@ -181,10 +164,21 @@ class DependencyManager:
         except Exception as e:
             return False, f"Failed to setup Python environment: {e}"
     
-    def _are_python_deps_satisfied(self, tool_name: str, requirements_file: Path) -> bool:
-        """Check if Python dependencies are already satisfied in virtual environment"""
+    def _cache_tool_requirements(self, tool_name: str, requirements_file: Path):
+        """Cache tool requirements for tracking which tools installed which packages"""
         try:
-            python_exe = self.get_tool_python_executable(tool_name)
+            cache_file = self.requirements_cache_dir / f"{tool_name}.txt"
+            shutil.copy(requirements_file, cache_file)
+            if self.debug:
+                print(f"Cached requirements for {tool_name}")
+        except Exception as e:
+            if self.debug:
+                print(f"Failed to cache requirements for {tool_name}: {e}")
+    
+    def _are_python_deps_satisfied(self, tool_name: str, requirements_file: Path) -> bool:
+        """Check if Python dependencies are already satisfied in shared virtual environment"""
+        try:
+            python_exe = self._get_python_executable()
             if not python_exe or not python_exe.exists():
                 return False
             
@@ -411,16 +405,19 @@ class DependencyManager:
                 if install_cmd:
                     print(f"  {install_cmd}")
     
-    def get_tool_python_executable(self, tool_name: str) -> Optional[Path]:
-        """Get Python executable for a tool's virtual environment"""
-        venv_path = self.venvs_dir / tool_name
-        
-        if os.name == 'nt':  # Windows
-            python_exe = venv_path / 'Scripts' / 'python.exe'
-        else:  # Unix-like
-            python_exe = venv_path / 'bin' / 'python'
-        
+    def _get_python_executable(self) -> Optional[Path]:
+        """Get Python executable for shared virtual environment"""
+        python_exe = self.shared_venv / 'bin' / 'python'
         return python_exe if python_exe.exists() else None
+    
+    def _get_pip_executable(self) -> Optional[Path]:
+        """Get pip executable for shared virtual environment"""
+        pip_exe = self.shared_venv / 'bin' / 'pip'
+        return pip_exe if pip_exe.exists() else None
+    
+    def get_tool_python_executable(self, tool_name: str) -> Optional[Path]:
+        """Get Python executable for tool execution (uses shared venv)"""
+        return self._get_python_executable()
     
     def run_tool_with_dependencies(self, tool_info: Dict, args: List[str] = None) -> int:
         """
@@ -475,26 +472,32 @@ class DependencyManager:
             return 1
     
     def clean_tool_cache(self, tool_name: str) -> bool:
-        """Clean cache for a specific tool"""
+        """Clean cache for a specific tool (removes requirement cache)"""
         try:
-            venv_path = self.venvs_dir / tool_name
-            if venv_path.exists():
-                shutil.rmtree(venv_path)
+            cache_file = self.requirements_cache_dir / f"{tool_name}.txt"
+            if cache_file.exists():
+                cache_file.unlink()
                 return True
             return False
         except Exception:
             return False
     
     def clean_all_cache(self) -> bool:
-        """Clean all dependency caches"""
+        """Clean all dependency caches and shared venv"""
         try:
+            # Remove shared virtual environment
+            if self.shared_venv.exists():
+                shutil.rmtree(self.shared_venv)
+            
+            # Remove cache directory
             if self.cache_dir.exists():
                 shutil.rmtree(self.cache_dir)
-                self.cache_dir.mkdir(parents=True, exist_ok=True)
-                self.venvs_dir.mkdir(parents=True, exist_ok=True)
-                self.pip_cache_dir.mkdir(parents=True, exist_ok=True)
-                return True
-            return False
+                
+            # Recreate cache directories
+            self.cache_dir.mkdir(parents=True, exist_ok=True)
+            self.pip_cache_dir.mkdir(parents=True, exist_ok=True)
+            self.requirements_cache_dir.mkdir(parents=True, exist_ok=True)
+            return True
         except Exception:
             return False
     
@@ -512,20 +515,22 @@ class DependencyManager:
             'venv_size': 0
         }
         
-        # Check virtual environment
-        venv_path = self.venvs_dir / tool_name
-        if venv_path.exists():
+        # Check shared virtual environment
+        if self.shared_venv.exists():
             status['has_venv'] = True
             try:
-                # Calculate venv size
-                total_size = sum(f.stat().st_size for f in venv_path.rglob('*') if f.is_file())
-                status['venv_size'] = total_size
+                # Calculate shared venv size (only reported once)
+                if tool_name == 'shared_venv_info':
+                    total_size = sum(f.stat().st_size for f in self.shared_venv.rglob('*') if f.is_file())
+                    status['venv_size'] = total_size
+                else:
+                    status['venv_size'] = 0  # Don't report size for individual tools
             except Exception:
                 pass
         
         # Check Python dependencies
         if tool_info.get('has_python_deps', False):
-            python_exe = self.get_tool_python_executable(tool_name)
+            python_exe = self._get_python_executable()
             if python_exe and python_exe.exists():
                 status['python_deps_satisfied'] = True
         else:
@@ -558,17 +563,15 @@ class DependencyManager:
             'cache_valid': cache_age < 300  # 5 minutes
         }
     
-    def validate_venv_integrity(self, tool_name: str) -> Tuple[bool, str]:
-        """Validate virtual environment integrity and suggest refresh if needed"""
-        venv_path = self.venvs_dir / tool_name
-        
-        if not venv_path.exists():
-            return False, "Virtual environment does not exist"
+    def validate_venv_integrity(self, tool_name: str = None) -> Tuple[bool, str]:
+        """Validate shared virtual environment integrity and suggest refresh if needed"""
+        if not self.shared_venv.exists():
+            return False, "Shared virtual environment does not exist"
         
         try:
-            python_exe = self.get_tool_python_executable(tool_name)
+            python_exe = self._get_python_executable()
             if not python_exe or not python_exe.exists():
-                return False, "Python executable missing in virtual environment"
+                return False, "Python executable missing in shared virtual environment"
             
             # Check if pip is working
             cmd = [str(python_exe), '-m', 'pip', '--version']

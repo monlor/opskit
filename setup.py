@@ -60,11 +60,15 @@ def setup_opskit():
     (cache_dir / 'pip_cache').mkdir(exist_ok=True)
     (cache_dir / 'requirements').mkdir(exist_ok=True)
     
+    # Create bin directory
+    bin_dir = opskit_root / 'bin'
+    bin_dir.mkdir(exist_ok=True)
+    
     # Create shared virtual environment
     create_shared_venv(opskit_root)
     
     # Update opskit executable to use shared venv
-    opskit_exe = opskit_root / 'opskit'
+    opskit_exe = opskit_root / 'bin' / 'opskit'
     shared_venv = opskit_root / '.venv'  # Define shared_venv path here
     if opskit_exe.exists():
         # Update shebang to point to shared venv Python
@@ -92,10 +96,11 @@ def setup_opskit():
     
     print("\n🎉 Setup complete!")
     print("\nNext steps:")
-    print("1. Add OpsKit to your PATH:")
-    print(f"   export PATH=\"{opskit_root}:$PATH\"")
+    print("1. Add OpsKit to your environment:")
+    print(f"   export OPSKIT_BASE_PATH=\"{opskit_root}\"")
+    print(f"   export PATH=\"{opskit_root}/bin:$PATH\"")
     print("2. Run a tool:")
-    print("   ./opskit run mysql-sync")
+    print("   opskit run mysql-sync")
     print("\nTool dependencies will be installed automatically on first run.")
 
 

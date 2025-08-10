@@ -21,19 +21,21 @@ import argparse
 from pathlib import Path
 
 # Add the OpsKit root directory to Python path
-OPSKIT_ROOT = Path(__file__).parent.absolute()
+OPSKIT_ROOT = Path(__file__).parent.parent.absolute()
 sys.path.insert(0, str(OPSKIT_ROOT))
 
 try:
     from core.cli import OpsKitCLI
     from core.platform_utils import PlatformUtils
+    from core.env import env
 except ImportError as e:
     print(f"Error: Failed to import OpsKit core modules: {e}")
     print("Please ensure OpsKit is properly installed.")
     sys.exit(1)
 
-__version__ = "0.1.0"
-__author__ = "OpsKit Development Team"
+# Load version from environment configuration
+__version__ = env.version
+__author__ = env.author
 
 
 def print_version():

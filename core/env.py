@@ -66,6 +66,14 @@ class EnvConfig:
     @property
     def log_max_size(self) -> str:
         return os.getenv('OPSKIT_LOGGING_MAX_SIZE', '10MB')
+    
+    @property
+    def version(self) -> str:
+        return os.getenv('OPSKIT_VERSION', '0.1.0')
+    
+    @property
+    def author(self) -> str:
+        return os.getenv('OPSKIT_AUTHOR', 'OpsKit Development Team')
 
 
 # Global env object

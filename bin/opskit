@@ -1,4 +1,4 @@
-#!/home/coder/opskit/.venv/bin/python
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
 OpsKit - Unified Operations Tool Management Platform
@@ -20,8 +20,16 @@ import sys
 import argparse
 from pathlib import Path
 
-# Add the OpsKit root directory to Python path
+# Discover OpsKit root directory and virtual environment
 OPSKIT_ROOT = Path(__file__).parent.parent.absolute()
+VENV_PYTHON = OPSKIT_ROOT / '.venv' / 'bin' / 'python'
+
+# If not running in virtual environment, re-execute with venv Python
+if VENV_PYTHON.exists() and sys.executable != str(VENV_PYTHON):
+    os.execv(str(VENV_PYTHON), [str(VENV_PYTHON), __file__] + sys.argv[1:])
+
+# Now running in the correct virtual environment
+# Add the OpsKit root directory to Python path
 sys.path.insert(0, str(OPSKIT_ROOT))
 
 try:

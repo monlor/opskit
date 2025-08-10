@@ -67,32 +67,11 @@ def setup_opskit():
     # Create shared virtual environment
     create_shared_venv(opskit_root)
     
-    # Update opskit executable to use shared venv
+    # Ensure opskit executable is executable
     opskit_exe = opskit_root / 'bin' / 'opskit'
-    shared_venv = opskit_root / '.venv'  # Define shared_venv path here
     if opskit_exe.exists():
-        # Update shebang to point to shared venv Python
-        python_exe = shared_venv / 'bin' / 'python'
-        
-        # Read current content
-        with open(opskit_exe, 'r') as f:
-            content = f.read()
-        
-        # Replace shebang
-        lines = content.split('\n')
-        if lines[0].startswith('#!'):
-            lines[0] = f"#!{python_exe}"
-            # Remove the temporary comment if it exists
-            if len(lines) > 1 and 'This script will be updated' in lines[1]:
-                lines.pop(1)
-        
-        # Write updated content
-        with open(opskit_exe, 'w') as f:
-            f.write('\n'.join(lines))
-        
-        # Make executable
         os.chmod(opskit_exe, 0o755)
-        print(f"✅ Updated opskit executable to use shared venv: {python_exe}")
+        print(f"✅ opskit executable is ready (will auto-detect shared venv)")
     
     print("\n🎉 Setup complete!")
     print("\nNext steps:")

@@ -37,13 +37,27 @@ class PlatformUtils:
                 'check': ['brew', '--version'],
                 'install': 'brew install {}',
                 'search': 'brew search {}',
-                'info': 'brew info {}'
+                'info': 'brew info {}',
+                'list': 'brew list',
+                'is_installed': 'brew list --formula --versions {}',
+                'query': 'brew list | grep -E "^{}$"',
+                'parser': {
+                    'exclude_prefixes': ['='],
+                    'field_index': 0
+                }
             },
             'port': {
                 'check': ['port', 'version'],
                 'install': 'sudo port install {}',
                 'search': 'port search {}',
-                'info': 'port info {}'
+                'info': 'port info {}',
+                'list': 'port installed',
+                'is_installed': 'port installed {}',
+                'query': 'port installed {} | grep -v "No ports"',
+                'parser': {
+                    'field_index': 0,
+                    'suffix_removal': [' @']
+                }
             }
         },
         'linux': {
@@ -51,31 +65,123 @@ class PlatformUtils:
                 'check': ['apt', '--version'],
                 'install': 'sudo apt-get install -y {}',
                 'search': 'apt search {}',
-                'info': 'apt show {}'
+                'info': 'apt show {}',
+                'list': 'dpkg -l',
+                'is_installed': 'dpkg -l {} 2>/dev/null | grep -q "^ii"',
+                'query': 'dpkg -l {} 2>/dev/null | grep "^ii"',
+                'parser': {
+                    'line_prefix': 'ii ',
+                    'field_index': 1,
+                    'suffix_removal': [':']
+                }
             },
             'yum': {
                 'check': ['yum', '--version'],
                 'install': 'sudo yum install -y {}',
                 'search': 'yum search {}',
-                'info': 'yum info {}'
+                'info': 'yum info {}',
+                'list': 'yum list installed',
+                'is_installed': 'yum list installed {} &>/dev/null',
+                'query': 'rpm -q {}',
+                'parser': {
+                    'exclude_prefixes': ['Installed', 'Last'],
+                    'field_index': 0,
+                    'suffix_removal': ['.']
+                }
             },
             'dnf': {
                 'check': ['dnf', '--version'],
                 'install': 'sudo dnf install -y {}',
                 'search': 'dnf search {}',
-                'info': 'dnf info {}'
+                'info': 'dnf info {}',
+                'list': 'dnf list installed',
+                'is_installed': 'dnf list installed {} &>/dev/null',
+                'query': 'rpm -q {}',
+                'parser': {
+                    'exclude_prefixes': ['Installed', 'Last'],
+                    'field_index': 0,
+                    'suffix_removal': ['.']
+                }
             },
             'pacman': {
                 'check': ['pacman', '--version'],
                 'install': 'sudo pacman -S --noconfirm {}',
                 'search': 'pacman -Ss {}',
-                'info': 'pacman -Si {}'
+                'info': 'pacman -Si {}',
+                'list': 'pacman -Q',
+                'is_installed': 'pacman -Q {} &>/dev/null',
+                'query': 'pacman -Q {}',
+                'parser': {
+                    'field_index': 0
+                }
             },
             'zypper': {
                 'check': ['zypper', '--version'],
                 'install': 'sudo zypper install -y {}',
                 'search': 'zypper search {}',
-                'info': 'zypper info {}'
+                'info': 'zypper info {}',
+                'list': 'zypper pa --installed-only',
+                'is_installed': 'zypper se --installed-only {} | grep -q "^i"',
+                'query': 'rpm -q {}',
+                'parser': {
+                    'line_prefix': 'i ',
+                    'separator': '|',
+                    'field_index': 1
+                }
+            },
+            'snap': {
+                'check': ['snap', '--version'],
+                'install': 'sudo snap install {}',
+                'search': 'snap find {}',
+                'info': 'snap info {}',
+                'list': 'snap list',
+                'is_installed': 'snap list {} &>/dev/null',
+                'query': 'snap list {}',
+                'parser': {
+                    'skip_lines': 1,
+                    'field_index': 0
+                }
+            },
+            'flatpak': {
+                'check': ['flatpak', '--version'],
+                'install': 'flatpak install -y {}',
+                'search': 'flatpak search {}',
+                'info': 'flatpak info {}',
+                'list': 'flatpak list',
+                'is_installed': 'flatpak list | grep -q {}',
+                'query': 'flatpak list | grep {}',
+                'parser': {
+                    'skip_lines': 1,
+                    'field_index': 0
+                }
+            },
+            'apk': {
+                'check': ['apk', '--version'],
+                'install': 'sudo apk add {}',
+                'search': 'apk search {}',
+                'info': 'apk info {}',
+                'list': 'apk list --installed',
+                'is_installed': 'apk list --installed {} | grep -q {}',
+                'query': 'apk list --installed {}',
+                'parser': {
+                    'field_index': 0,
+                    'suffix_removal': ['-']
+                }
+            }
+        },
+        'freebsd': {
+            'pkg': {
+                'check': ['pkg', '--version'],
+                'install': 'sudo pkg install -y {}',
+                'search': 'pkg search {}',
+                'info': 'pkg info {}',
+                'list': 'pkg info',
+                'is_installed': 'pkg info {} &>/dev/null',
+                'query': 'pkg info {}',
+                'parser': {
+                    'field_index': 0,
+                    'suffix_removal': ['-']
+                }
             }
         }
     }
@@ -110,6 +216,8 @@ class PlatformUtils:
             return 'darwin'
         elif system == 'linux':
             return 'linux'
+        elif system == 'freebsd':
+            return 'freebsd'
         else:
             return system
     
@@ -232,10 +340,142 @@ class PlatformUtils:
         return available[0] if available else None
     
     @classmethod
+    def is_package_installed(cls, package_name: str, 
+                           package_manager: Optional[str] = None) -> bool:
+        """
+        Check if a system package is installed using the appropriate package manager
+        
+        Args:
+            package_name: Name of the package to check
+            package_manager: Specific package manager to use (auto-detect if None)
+        
+        Returns:
+            True if package is installed, False otherwise
+        """
+        if not package_manager:
+            package_manager = cls.get_preferred_package_manager()
+        
+        if not package_manager:
+            return False
+        
+        os_type = cls.get_os_type()
+        managers = cls.PACKAGE_MANAGERS.get(os_type, {})
+        manager_config = managers.get(package_manager)
+        
+        if not manager_config or 'is_installed' not in manager_config:
+            return False
+        
+        check_command = manager_config['is_installed'].format(package_name)
+        
+        # Handle shell commands with pipes and redirects
+        if '|' in check_command or '&>' in check_command or '2>' in check_command:
+            # Execute as shell command
+            success, _, _ = cls.run_command(['sh', '-c', check_command], timeout=10)
+        else:
+            # Execute as regular command
+            command_parts = check_command.split()
+            success, _, _ = cls.run_command(command_parts, timeout=10)
+        
+        return success
+
+    @classmethod
+    def get_installed_packages(cls, package_manager: Optional[str] = None) -> List[str]:
+        """
+        Get list of all installed packages
+        
+        Args:
+            package_manager: Specific package manager to use (auto-detect if None)
+        
+        Returns:
+            List of installed package names
+        """
+        if not package_manager:
+            package_manager = cls.get_preferred_package_manager()
+        
+        if not package_manager:
+            return []
+        
+        os_type = cls.get_os_type()
+        managers = cls.PACKAGE_MANAGERS.get(os_type, {})
+        manager_config = managers.get(package_manager)
+        
+        if not manager_config or 'list' not in manager_config:
+            return []
+        
+        list_command = manager_config['list']
+        command_parts = list_command.split()
+        
+        success, stdout, _ = cls.run_command(command_parts, timeout=30)
+        
+        if not success or not stdout:
+            return []
+        
+        # Parse package names using manager configuration
+        os_type = cls.get_os_type()
+        managers = cls.PACKAGE_MANAGERS.get(os_type, {})
+        manager_config = managers.get(package_manager, {})
+        
+        packages = []
+        lines = stdout.strip().split('\n')
+        
+        # Use configured parser rules
+        packages = cls._parse_package_list(lines, manager_config)
+        
+        return packages
+
+    @classmethod
+    def _parse_package_list(cls, lines: List[str], manager_config: Dict) -> List[str]:
+        """Parse package list using manager configuration"""
+        if not manager_config:
+            return []
+        
+        packages = []
+        parser = manager_config.get('parser', {})
+        
+        skip_lines = parser.get('skip_lines', 0)
+        line_prefix = parser.get('line_prefix', '')
+        exclude_prefixes = parser.get('exclude_prefixes', [])
+        field_index = parser.get('field_index', 0)
+        separator = parser.get('separator', None)
+        suffix_removal = parser.get('suffix_removal', [])
+        
+        for i, line in enumerate(lines):
+            if i < skip_lines or not line.strip():
+                continue
+                
+            if line_prefix and not line.startswith(line_prefix):
+                continue
+                
+            if any(line.startswith(prefix) for prefix in exclude_prefixes):
+                continue
+            
+            # Extract package name
+            parts = line.split(separator) if separator else line.split()
+            
+            if len(parts) > field_index:
+                package_name = parts[field_index].strip()
+                
+                # Remove suffixes (architecture, version, etc.)
+                for suffix in suffix_removal:
+                    if suffix in package_name:
+                        package_name = package_name.split(suffix)[0]
+                
+                if package_name:
+                    packages.append(package_name)
+        
+        return packages
+
+    @classmethod
     def install_system_package(cls, package_name: str, 
-                             package_manager: Optional[str] = None) -> Tuple[bool, str]:
+                             package_manager: Optional[str] = None, 
+                             force_install: bool = False) -> Tuple[bool, str]:
         """
         Install a system package using the appropriate package manager
+        
+        Args:
+            package_name: Name of the package to install
+            package_manager: Specific package manager to use (auto-detect if None)
+            force_install: Skip package existence check and force installation
         
         Returns:
             Tuple of (success, message)
@@ -245,6 +485,10 @@ class PlatformUtils:
         
         if not package_manager:
             return (False, "No package manager available")
+        
+        # Check if package is already installed (unless forced)
+        if not force_install and cls.is_package_installed(package_name, package_manager):
+            return (True, f"Package {package_name} is already installed")
         
         os_type = cls.get_os_type()
         managers = cls.PACKAGE_MANAGERS.get(os_type, {})

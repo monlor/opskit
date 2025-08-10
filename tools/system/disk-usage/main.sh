@@ -27,9 +27,6 @@ TIMEOUT=$(get_env_var "TIMEOUT" "10" "int")
 EXCLUDE_TMPFS=$(get_env_var "EXCLUDE_TMPFS" "true" "bool")
 EXCLUDE_PROC=$(get_env_var "EXCLUDE_PROC" "true" "bool")
 
-print_header() {
-    show_tool_info "$TOOL_NAME" "$TOOL_VERSION" "Environment-based disk usage monitoring tool"
-}
 
 get_disk_usage() {
     local df_options=""
@@ -223,8 +220,6 @@ format_csv() {
 main() {
     # Start tool execution
     tool_start "$TOOL_NAME"
-    
-    print_header
     
     # Debug output if enabled
     log_debug "Configuration loaded:"

@@ -286,7 +286,7 @@ class DependencyManager:
         return missing_deps
     
     def _is_dependency_satisfied(self, dep_name: str) -> bool:
-        """Check if a dependency is satisfied (with caching)"""
+        """Check if a dependency is satisfied (with caching and package manager support)"""
         if not self.dependencies_config:
             return True
         
@@ -302,21 +302,51 @@ class DependencyManager:
             return self._system_deps_cache[dep_name]
             
         system_deps = self.dependencies_config.get('system_dependencies', {})
+        settings = self.dependencies_config.get('settings', {})
+        check_commands = settings.get('check_commands', True)
+        
         dep_config = system_deps.get(dep_name, {})
         commands = dep_config.get('commands', [])
+        packages = dep_config.get('packages', {})
         
-        if not commands:
-            result = True
-        else:
-            # Dependency is satisfied if ALL required commands exist
+        result = False
+        
+        # Method 1: Check if package is installed via package manager
+        if packages:
+            os_type = self.platform_utils.get_os_type()
+            
+            if os_type == 'linux':
+                distro = self.platform_utils.get_linux_distribution()
+                package_name = packages.get(distro)
+            elif os_type == 'darwin':
+                package_name = packages.get('macos')
+            else:
+                package_name = packages.get(os_type)
+            
+            if package_name:
+                result = self.platform_utils.is_package_installed(package_name)
+                if self.debug and result:
+                    print(f"Package {package_name} found via package manager")
+        
+        # Method 2: Fallback to command existence check (if enabled)
+        if not result and commands and check_commands:
             result = all(self.platform_utils.command_exists(cmd) for cmd in commands)
+            if self.debug and result:
+                print(f"Commands {commands} found in PATH")
+        elif not result and commands and not check_commands:
+            if self.debug:
+                print(f"Command checking disabled for {dep_name}, skipping command verification")
+        
+        # Method 3: No specific check method - assume satisfied
+        if not commands and not packages:
+            result = True
         
         # Cache the result
         self._system_deps_cache[dep_name] = result
         self._last_cache_time = current_time
         
         if self.debug:
-            print(f"Dependency {dep_name}: {'satisfied' if result else 'missing'}")
+            print(f"Dependency {dep_name}: {'satisfied' if result else 'missing'} (check_commands={check_commands})")
         
         return result
     
@@ -342,7 +372,7 @@ class DependencyManager:
         return installed, failed
     
     def _install_dependency(self, dep_name: str) -> bool:
-        """Install a single dependency"""
+        """Install a single dependency using enhanced package manager support"""
         system_deps = self.dependencies_config.get('system_dependencies', {})
         dep_config = system_deps.get(dep_name, {})
         
@@ -362,21 +392,37 @@ class DependencyManager:
             package_name = packages.get(os_type)
         
         if not package_name:
+            if self.debug:
+                print(f"No package mapping found for {dep_name} on {os_type}")
             return False
         
-        success, _ = self.platform_utils.install_system_package(package_name)
+        # Use enhanced install method with config-based package manager preference
+        preferred_manager = self._get_preferred_package_manager()
+        success, message = self.platform_utils.install_system_package(package_name, preferred_manager)
         
-        # Clear cache for this dependency if installation was successful
-        if success and dep_name in self._system_deps_cache:
+        if self.debug:
+            print(f"Installation result for {package_name}: {message}")
+        
+        # Clear cache for this dependency regardless of outcome to force recheck
+        if dep_name in self._system_deps_cache:
             del self._system_deps_cache[dep_name]
+            self._last_cache_time = 0  # Force cache refresh
             if self.debug:
-                print(f"Cleared cache for {dep_name} after installation")
+                print(f"Cleared cache for {dep_name} after installation attempt")
         
         return success
     
     def _show_install_guidance(self, missing_deps: List[str]):
-        """Show installation guidance"""
+        """Show installation guidance with descriptions and install notes"""
         if not missing_deps:
+            return
+        
+        settings = self.dependencies_config.get('settings', {})
+        suggest_install = settings.get('suggest_install', True)
+        
+        if not suggest_install:
+            if self.debug:
+                print("Installation suggestions disabled by configuration")
             return
         
         print(f"\nError: Missing system dependencies: {', '.join(missing_deps)}")
@@ -384,12 +430,21 @@ class DependencyManager:
         
         system_deps = self.dependencies_config.get('system_dependencies', {})
         os_type = self.platform_utils.get_os_type()
-        pm = self.platform_utils.get_preferred_package_manager()
+        pm = self._get_preferred_package_manager()
         
         for dep_name in missing_deps:
             dep_config = system_deps.get(dep_name, {})
             packages = dep_config.get('packages', {})
+            description = dep_config.get('description', '')
+            install_notes = dep_config.get('install_notes', {})
             
+            # Show dependency description
+            if description:
+                print(f"\n• {dep_name}: {description}")
+            else:
+                print(f"\n• {dep_name}")
+            
+            # Get platform-specific package name
             if os_type == 'linux':
                 distro = self.platform_utils.get_linux_distribution()
                 package = packages.get(distro)
@@ -398,12 +453,59 @@ class DependencyManager:
             else:
                 package = packages.get(os_type)
             
+            # Show standard installation command
             if package and pm:
                 managers = self.platform_utils.PACKAGE_MANAGERS.get(os_type, {})
                 pm_config = managers.get(pm, {})
                 install_cmd = pm_config.get('install', '').format(package)
                 if install_cmd:
                     print(f"  {install_cmd}")
+            
+            # Show special installation notes if available
+            if install_notes:
+                platform_key = None
+                if os_type == 'linux':
+                    platform_key = self.platform_utils.get_linux_distribution()
+                elif os_type == 'darwin':
+                    platform_key = 'macos'
+                else:
+                    platform_key = os_type
+                
+                # Check for platform-specific install notes
+                note = install_notes.get(platform_key) or install_notes.get('all')
+                if note:
+                    print(f"  Note: {note}")
+            
+            # Special handling for packages with null package names
+            if not package and install_notes:
+                note = install_notes.get('all')
+                if note:
+                    print(f"  Manual installation required: {note}")
+    
+    def _get_preferred_package_manager(self) -> Optional[str]:
+        """Get preferred package manager based on config or auto-detection"""
+        package_managers_config = self.dependencies_config.get('package_managers', {})
+        os_type = self.platform_utils.get_os_type()
+        
+        if os_type == 'linux':
+            distro = self.platform_utils.get_linux_distribution()
+            preferred_order = package_managers_config.get(distro, [])
+        elif os_type == 'darwin':
+            preferred_order = package_managers_config.get('macos', [])
+        else:
+            preferred_order = package_managers_config.get(os_type, [])
+        
+        # If config specifies an order, try them in that order
+        if preferred_order:
+            available = self.platform_utils.detect_available_package_managers()
+            for manager in preferred_order:
+                if manager in available:
+                    if self.debug:
+                        print(f"Using package manager {manager} from config preference")
+                    return manager
+        
+        # Fallback to platform utils default behavior
+        return self.platform_utils.get_preferred_package_manager()
     
     def _get_python_executable(self) -> Optional[Path]:
         """Get Python executable for shared virtual environment"""
@@ -562,6 +664,34 @@ class DependencyManager:
             'cache_age_seconds': cache_age,
             'cache_valid': cache_age < 300  # 5 minutes
         }
+    
+    def get_package_manager_info(self) -> Dict:
+        """Get information about available package managers"""
+        return {
+            'available_managers': self.platform_utils.detect_available_package_managers(),
+            'preferred_manager': self.platform_utils.get_preferred_package_manager(),
+            'os_type': self.platform_utils.get_os_type(),
+            'platform_info': self.platform_utils.get_platform_info()
+        }
+    
+    def check_package_installed(self, package_name: str, package_manager: str = None) -> bool:
+        """Check if a specific package is installed using package manager"""
+        return self.platform_utils.is_package_installed(package_name, package_manager)
+    
+    def get_installed_packages(self, package_manager: str = None) -> List[str]:
+        """Get list of all installed packages"""
+        return self.platform_utils.get_installed_packages(package_manager)
+    
+    def install_package(self, package_name: str, package_manager: str = None, force: bool = False) -> Tuple[bool, str]:
+        """Install a package directly using package manager"""
+        return self.platform_utils.install_system_package(package_name, package_manager, force)
+    
+    def bulk_check_dependencies(self, dep_names: List[str]) -> Dict[str, bool]:
+        """Check multiple dependencies at once"""
+        results = {}
+        for dep_name in dep_names:
+            results[dep_name] = self._is_dependency_satisfied(dep_name)
+        return results
     
     def validate_venv_integrity(self, tool_name: str = None) -> Tuple[bool, str]:
         """Validate shared virtual environment integrity and suggest refresh if needed"""

@@ -1,0 +1,24 @@
+# AWS SDK for Python
+boto3>=1.26.0
+botocore>=1.29.0
+
+# Command-line interface
+click>=8.0.0
+
+# Terminal colors and formatting
+colorama>=0.4.4
+
+# Progress bars (optional but recommended)
+tqdm>=4.64.0
+
+# Enhanced interactive prompts (optional)
+prompt-toolkit>=3.0.0
+
+# File system monitoring (optional)
+watchdog>=2.1.0
+
+# Date/time handling
+python-dateutil>=2.8.0
+
+# Configuration file parsing
+PyYAML>=6.0

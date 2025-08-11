@@ -36,6 +36,13 @@ tools:
       keywords: [kubernetes, k8s, resource, copy, migration, cluster, namespace, kubectl]
       dependencies: [kubectl, krew]  # kubectl 必需，krew 可选但推荐
 
+  storage:
+    s3-sync:
+      version: "1.0.0"
+      description: AWS S3 and S3-compatible storage synchronization tool with bidirectional sync, connection caching, and conflict resolution
+      keywords: [s3, aws, storage, sync, backup, cloud-storage, file-sync]
+      dependencies: [boto3, aws-cli]
+
 # 工具类别定义
 categories:
   database:

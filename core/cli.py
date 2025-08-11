@@ -44,7 +44,7 @@ try:
 except ImportError:
     prompt_toolkit_available = False
 
-from .env import env, get_tool_temp_dir, load_tool_env, get_config_summary
+from .env import env, get_tool_temp_dir, load_tool_env, get_config_summary, is_first_run, initialize_env_file
 from .platform_utils import PlatformUtils
 from .dependency_manager import DependencyManager
 from .theme import theme_manager
@@ -254,6 +254,15 @@ class OpsKitCLI:
             self._print("Error: prompt_toolkit is required for interactive mode.", "red")
             self._print("Please install it with: pip install prompt-toolkit", "yellow")
             return
+        
+        # Check if this is first run - if so, go directly to initial setup
+        if is_first_run():
+            self._print("Welcome to OpsKit! 🚀", "bold green")
+            self._print("Let's set up your configuration first.", "yellow")
+            success = self.initial_setup()
+            if not success:
+                self._print("Setup cancelled. You can run settings later with Ctrl+S.", "yellow")
+                return
         
         # Load and prepare tools
         tools = self.discover_tools()
@@ -641,59 +650,116 @@ class OpsKitCLI:
         
         self._print_panel(status_info, "System Status", "green")
     
+    def settings_wizard(self, is_first_run_setup: bool = False) -> bool:
+        """
+        Settings configuration wizard
+        
+        Args:
+            is_first_run_setup: True if this is first run setup, False for settings menu
+        
+        Returns:
+            True if configuration was successful, False otherwise
+        """
+        if is_first_run_setup:
+            self._print("\n🔧 Initial Setup", "bold cyan")
+            self._print("Configure basic OpsKit settings:", "dim")
+        else:
+            self._print("\n⚙️  Settings Configuration", "bold cyan")
+            self._print("Update your OpsKit settings:", "dim")
+        
+        # Get current values (defaults for first run, current values for settings)
+        if is_first_run_setup:
+            current_log_enabled = True  # Default for first run
+            current_theme = 'auto'      # Default for first run
+        else:
+            current_log_enabled = env.log_file_enabled
+            current_theme = env.ui_theme
+        
+        # 1. Ask about file logging
+        self._print("\n1. Logging Configuration", "bold yellow")
+        if not is_first_run_setup:
+            self._print(f"   Current: File logging is {'enabled' if current_log_enabled else 'disabled'}", "dim")
+        
+        log_to_file = self._confirm(
+            "Save logs to file? (recommended for debugging)", 
+            current_log_enabled
+        )
+        
+        # 2. Ask about theme
+        self._print("\n2. Theme Configuration", "bold yellow")
+        if not is_first_run_setup:
+            theme_info = theme_manager.get_theme_info(current_theme)
+            self._print(f"   Current: {current_theme} (active: {theme_info['active_theme']})", "dim")
+        
+        self._print("Theme options:")
+        self._print("  auto  - automatically detect terminal background")
+        self._print("  light - for light terminal backgrounds")
+        self._print("  dark  - for dark terminal backgrounds")
+        
+        theme_choice = self._input("Choose theme", current_theme).lower()
+        if theme_choice not in ['auto', 'light', 'dark']:
+            theme_choice = current_theme
+        
+        # 3. Save configuration
+        action_text = "Creating" if is_first_run_setup else "Updating"
+        self._print(f"\n📝 {action_text} configuration...", "blue")
+        success = initialize_env_file(log_to_file=log_to_file, theme=theme_choice)
+        
+        if success:
+            self._print(f"✅ Configuration {action_text.lower()} successfully!", "green")
+            self._print(f"  - File logging: {'enabled' if log_to_file else 'disabled'}")
+            self._print(f"  - Theme: {theme_choice}")
+            self._print(f"  - Config file: data/.env")
+            
+            if not is_first_run_setup:
+                # Show what changed
+                changes = []
+                if log_to_file != current_log_enabled:
+                    changes.append(f"file logging: {current_log_enabled} → {log_to_file}")
+                if theme_choice != current_theme:
+                    changes.append(f"theme: {current_theme} → {theme_choice}")
+                
+                if changes:
+                    self._print(f"\nChanges made:", "yellow")
+                    for change in changes:
+                        self._print(f"  - {change}")
+                else:
+                    self._print("No changes made.", "dim")
+            else:
+                self._print("\nYou can access settings later with Ctrl+S", "dim")
+            
+            return True
+        else:
+            self._print(f"❌ Failed to {action_text.lower()} configuration file", "red")
+            return False
+    
+    def initial_setup(self) -> bool:
+        """Initial setup wizard for first-time users"""
+        return self.settings_wizard(is_first_run_setup=True)
+    
     def configuration_menu(self) -> None:
         """Configuration management menu"""
-        self._print("\n📋 Configuration Menu", "bold blue")
-        
-        # Show current theme status
+        # Show current configuration first
         theme_info = theme_manager.get_theme_info(env.ui_theme)
         
         config_info = f"Current Settings:\n"
+        config_info += f"  Version: {env.version}\n"
+        config_info += f"  File Logging: {'enabled' if env.log_file_enabled else 'disabled'}\n"
         config_info += f"  Theme: {env.ui_theme} (active: {theme_info['active_theme']})\n"
-        config_info += f"  Detected Background: {theme_info['detected_background']}\n\n"
+        config_info += f"  Detected Background: {theme_info['detected_background']}\n"
         
-        config_info += f"Theme Options (set in data/.env):\n"
-        config_info += f"  OPSKIT_UI_THEME=auto   (detect terminal background)\n"
-        config_info += f"  OPSKIT_UI_THEME=light  (for light terminals)\n"
-        config_info += f"  OPSKIT_UI_THEME=dark   (for dark terminals)\n\n"
+        # Show macOS-specific info if available
+        if 'macos_appearance' in theme_info and theme_info['macos_appearance'] != 'unknown':
+            config_info += f"  macOS System: {theme_info['macos_appearance']} mode\n"
         
-        config_info += f"Other configurations are managed through environment variables."
+        config_info += f"\nConfiguration file: data/.env"
         
-        self._print_panel(config_info, "OpsKit Configuration", "cyan")
+        self._print_panel(config_info, "📋 Current Configuration", "cyan")
         
-        # Show test colors
-        if self._confirm("Test theme visibility?", False):
-            self._test_theme_visibility()
-    
-    def _test_theme_visibility(self) -> None:
-        """Test theme visibility with sample text"""
-        self._print("\n🎨 Theme Visibility Test", "bold blue")
-        
-        current_theme = theme_manager.get_theme_mode(env.ui_theme)
-        self._print(f"Current active theme: {current_theme}", "yellow")
-        
-        if rich_available and self.console:
-            # Test different colors based on current theme
-            if current_theme == "dark":
-                self.console.print("→ Normal text (white on dark)", style="white")
-                self.console.print("→ Selected item", style="black on bright_cyan")
-                self.console.print("→ Category text", style="yellow")
-                self.console.print("→ Description text", style="bright_black")
-                self.console.print("→ Header text", style="bright_cyan bold")
-            else:  # light theme
-                self.console.print("→ Normal text (black on light)", style="black")
-                self.console.print("→ Selected item", style="white on blue")
-                self.console.print("→ Category text", style="#cc6600")
-                self.console.print("→ Description text", style="#666666")
-                self.console.print("→ Header text", style="blue bold")
-            
-            self.console.print("→ Error text", style="red")
-        else:
-            self._print("→ Normal text should be clearly visible")
-            self._print("→ Categories and descriptions in different shades")
-        
-        self._print(f"\n💡 If text is hard to see, set OPSKIT_UI_THEME=light or dark in data/.env")
-        input("Press Enter to continue...")
+        # Ask if user wants to modify settings
+        if self._confirm("Modify settings?", False):
+            # Use the same settings wizard
+            self.settings_wizard(is_first_run_setup=False)
     
     def update_opskit(self) -> None:
         """Update OpsKit using git pull"""

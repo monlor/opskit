@@ -558,3 +558,4 @@ opskit run k8s-resource-copy  # Kubernetes 资源复制
 3. 确认配置优先级
 4. 重启 opskit 服务
 - refact memery , some core libs have been removed and refacted, directory has been changed a lot
+- opskit环境变量访问应该使用env.py，不能直接读取data/.env

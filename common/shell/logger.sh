@@ -13,14 +13,17 @@ fi
 
 # Configuration variables are injected by CLI, use defaults if not set
 
-# Map log levels to numeric values for filtering
-declare -A LOG_LEVELS=(
-    ["DEBUG"]=10
-    ["INFO"]=20
-    ["WARNING"]=30
-    ["ERROR"]=40
-    ["CRITICAL"]=50
-)
+# Map log levels to numeric values for filtering (macOS compatible)
+_get_log_level_value() {
+    case "$1" in
+        "DEBUG") echo "10" ;;
+        "INFO") echo "20" ;;
+        "WARNING") echo "30" ;;
+        "ERROR") echo "40" ;;
+        "CRITICAL") echo "50" ;;
+        *) echo "20" ;;  # Default to INFO level
+    esac
+}
 
 # Get logs directory - only create if file logging is enabled
 _get_logs_dir() {
@@ -42,8 +45,8 @@ _get_timestamp() {
 _should_log() {
     local level="$1"
     local current_log_level="${OPSKIT_LOGGING_CONSOLE_LEVEL:-INFO}"
-    local current_level_value="${LOG_LEVELS[$current_log_level]:-20}"
-    local message_level_value="${LOG_LEVELS[$level]:-20}"
+    local current_level_value=$(_get_log_level_value "$current_log_level")
+    local message_level_value=$(_get_log_level_value "$level")
     
     [[ $message_level_value -ge $current_level_value ]]
 }

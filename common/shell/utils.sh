@@ -25,7 +25,7 @@ get_env_var() {
     
     case "$var_type" in
         bool)
-            case "${value,,}" in
+            case "$(echo "$value" | tr '[:upper:]' '[:lower:]')" in
                 true|1|yes|on) echo "true" ;;
                 *) echo "false" ;;
             esac
@@ -195,7 +195,7 @@ ask_yes_no() {
         fi
         
         read -r response
-        response=$(trim "${response,,}")
+        response=$(trim "$(echo "$response" | tr '[:upper:]' '[:lower:]')")
         
         if [[ -z "$response" ]]; then
             response="$default"

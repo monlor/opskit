@@ -69,6 +69,11 @@ categories:
     name: Cloud Native Tools
     description: Kubernetes, Docker, and cloud-native platform management tools
     icon: ☁️
+    
+  storage:
+    name: Storage Tools
+    description: Storage management, backup, synchronization and data transfer tools
+    icon: 💾
 
 # 全局配置
 global:

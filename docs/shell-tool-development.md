@@ -39,6 +39,7 @@ tools/category/tool-name/
 source "${OPSKIT_BASE_PATH}/common/shell/logger.sh"
 source "${OPSKIT_BASE_PATH}/common/shell/utils.sh"
 source "${OPSKIT_BASE_PATH}/common/shell/storage.sh"  # 如果需要存储功能
+source "${OPSKIT_BASE_PATH}/common/shell/interactive.sh"  # 如果需要交互功能
 ```
 
 **2. 使用 OpsKit 环境变量**
@@ -244,21 +245,43 @@ duration=$(time_diff "$start_time" "$end_time")
 log_info "Operation took $duration"
 ```
 
-#### 用户交互
+### 交互式组件 (interactive.sh)
+
+#### 用户输入和确认
 ```bash
-# 询问是/否问题
-if ask_yes_no "Continue with operation?" "y"; then
+# 获取用户输入（带验证）
+username=$(get_user_input "Enter username" "admin" true "validate_username")
+
+# 用户确认
+if confirm "Continue with operation?" true; then
     log_info "User confirmed"
 fi
 
-# 获取用户输入
-username=$(get_input "Enter username" "admin")
+# 从列表中选择
+selected=$(select_from_list "Choose option:" "option1,option2,option3")
 
-# 带验证的输入
-validate_email() {
-    [[ "$1" =~ ^[^@]+@[^@]+\.[^@]+$ ]]
+# 删除确认
+if delete_confirmation "connection" "test-db"; then
+    log_info "User confirmed deletion"
+fi
+```
+
+#### 内置验证器
+```bash
+# 邮箱验证
+email=$(get_user_input "Enter email" "" true "validate_email")
+
+# IP 地址验证
+ip_addr=$(get_user_input "Enter IP address" "127.0.0.1" true "validate_ip")
+
+# 端口验证
+port=$(get_user_input "Enter port" "3306" true "validate_port")
+
+# 自定义验证器
+validate_username() {
+    [[ "$1" =~ ^[a-zA-Z][a-zA-Z0-9_]{2,19}$ ]]
 }
-email=$(get_input "Enter email" "" "validate_email" 3)
+username=$(get_user_input "Enter username" "" true "validate_username")
 ```
 
 #### 系统信息
@@ -408,6 +431,7 @@ RATE_LIMIT=$(get_env_var "RATE_LIMIT" "1.0" "float")
 source "${OPSKIT_BASE_PATH}/common/shell/logger.sh"
 source "${OPSKIT_BASE_PATH}/common/shell/utils.sh"
 source "${OPSKIT_BASE_PATH}/common/shell/storage.sh"
+source "${OPSKIT_BASE_PATH}/common/shell/interactive.sh"
 
 # Tool configuration using environment variables
 DEBUG=$(get_env_var "DEBUG" "false" "bool")
@@ -664,6 +688,16 @@ done
 wait  # 等待所有后台任务完成
 ```
 
+## 交互式组件参考
+
+详细的交互式组件使用方法请参考：[交互式组件使用指南](interactive-components-guide.md)
+
+该指南包含：
+- Python 和 Shell 版本的完整 API 文档
+- 使用示例和最佳实践
+- 内置验证器说明
+- 组件对比表
+
 ## 总结
 
 ### Shell 工具开发核心要点
@@ -671,14 +705,16 @@ wait  # 等待所有后台任务完成
 **必须遵循**：
 - 使用标准的公共库导入模式
 - 使用 `get_env_var()` 获取配置，支持类型转换
+- 使用交互式组件进行用户交互，不要自行实现输入/确认逻辑
 - 不要定义工具名称和版本（由框架管理）
 - 使用 OpsKit 的日志和存储系统
 - 遵循工具生命周期管理
 
 **公共库功能**：
 - **logger.sh**: 统一日志系统、工具生命周期、步骤管理
-- **utils.sh**: 环境变量处理、命令检查、文件操作、字符串处理、用户交互、系统信息
+- **utils.sh**: 环境变量处理、命令检查、文件操作、字符串处理、系统信息
 - **storage.sh**: 键值存储、工具配置、执行结果存储
+- **interactive.sh**: 用户交互组件、输入验证、选择列表、确认对话框
 
 **环境变量**：
 - `OPSKIT_BASE_PATH`: 框架根目录

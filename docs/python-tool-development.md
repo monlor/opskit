@@ -41,7 +41,8 @@ sys.path.insert(0, os.path.join(os.environ['OPSKIT_BASE_PATH'], 'common/python')
 
 from logger import get_logger
 from storage import get_storage
-from utils import run_command, get_user_input, timestamp, get_env_var
+from utils import run_command, timestamp, get_env_var
+from interactive import get_input, confirm, select_from_list, delete_confirm
 ```
 
 **2. 使用 OpsKit 组件初始化**
@@ -132,17 +133,35 @@ history = storage.get('history', [])
 
 ### 工具函数
 ```python
-from utils import run_command, get_user_input, get_env_var
+from utils import run_command, get_env_var
 
 # 执行系统命令
 success, stdout, stderr = run_command(['mysql', '--version'])
 
-# 获取用户输入
-name = get_user_input("Enter connection name")
-
 # 获取环境变量（重要：必须使用这个函数）
 timeout = get_env_var('TIMEOUT', 30, int)
 debug = get_env_var('DEBUG', False, bool)
+```
+
+### 交互式组件
+```python
+from interactive import get_input, confirm, select_from_list, delete_confirm
+
+# 获取用户输入（带验证）
+name = get_input("Enter connection name", validator=lambda x: len(x.strip()) > 0)
+
+# 获取确认
+if confirm("Continue with operation?"):
+    # 执行操作
+    pass
+
+# 从列表中选择
+choice = select_from_list("Select option:", ["option1", "option2", "option3"])
+
+# 删除确认
+if delete_confirm("connection", "test-db"):
+    # 执行删除
+    pass
 ```
 
 ## 配置管理
@@ -214,7 +233,8 @@ sys.path.insert(0, os.path.join(os.environ['OPSKIT_BASE_PATH'], 'common/python')
 
 from logger import get_logger
 from storage import get_storage
-from utils import run_command, get_user_input, timestamp, get_env_var
+from utils import run_command, timestamp, get_env_var
+from interactive import get_input, confirm, select_from_list, delete_confirm
 
 # Third-party imports
 try:
@@ -302,6 +322,16 @@ if __name__ == '__main__':
     main()
 ```
 
+## 交互式组件参考
+
+详细的交互式组件使用方法请参考：[交互式组件使用指南](interactive-components-guide.md)
+
+该指南包含：
+- Python 和 Shell 版本的完整 API 文档
+- 使用示例和最佳实践
+- 配置选项说明
+- 组件对比表
+
 ## 总结
 
 ### OpsKit Python 工具开发核心要点
@@ -309,6 +339,7 @@ if __name__ == '__main__':
 **必须遵循**：
 - 使用标准的公共库导入模式
 - 使用 `get_env_var()` 获取配置，不要使用 `os.environ.get()`
+- 使用交互式组件进行用户交互，不要自行实现输入/确认逻辑
 - 不要定义工具版本号（由框架管理）
 - 不要在工具中自动加载 .env 文件
 - 使用 OpsKit 的日志和存储系统

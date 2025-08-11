@@ -76,6 +76,8 @@ logging:
 - **Cache Management**: Users can view, test, and delete cached connections
 - **Connection Testing**: Test cached connections before use to detect credential changes
 - **Temporary Use**: Option to use connections without caching for sensitive environments
+- **Auto-Retry Logic**: Automatic retry with configurable attempts and delay for failed sync operations
+- **Consistent Cache Sorting**: Cached connections sorted consistently by last used timestamp
 
 ## Testing Approach
 - **Unit Tests**: Core functionality and edge cases

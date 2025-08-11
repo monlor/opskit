@@ -10,6 +10,7 @@ import json
 import base64
 import getpass
 import subprocess
+import time
 from pathlib import Path
 from typing import Dict, List, Tuple, Optional
 from datetime import datetime
@@ -54,6 +55,7 @@ class MySQLSyncTool:
         # Load configuration from environment variables using utils helper
         self.timeout = get_env_var('TIMEOUT', 30, int)
         self.max_retries = get_env_var('MAX_RETRIES', 3, int)
+        self.retry_delay = get_env_var('RETRY_DELAY', 2, int)
         self.connect_timeout = get_env_var('CONNECT_TIMEOUT', 30, int)
         self.batch_size = get_env_var('BATCH_SIZE', 100, int)
         self.confirm_destructive = get_env_var('CONFIRM_DESTRUCTIVE', True, bool)
@@ -109,8 +111,15 @@ class MySQLSyncTool:
                 'display': f"{name} ({cached['user']}@{cached['host']}:{cached['port']})"
             })
         
-        # Sort by last used (most recent first)
-        connections.sort(key=lambda x: x['last_used'], reverse=True)
+        # Sort by last used (most recent first), handle 'Unknown' timestamps properly
+        def sort_key(connection):
+            last_used = connection['last_used']
+            if last_used == 'Unknown':
+                # Use epoch time (very old) for unknown timestamps to put them at the end
+                return '1970-01-01 00:00:00'
+            return last_used
+        
+        connections.sort(key=sort_key, reverse=True)
         return connections
 
     def select_cached_connection(self, connection_type: str) -> Optional[Dict[str, str]]:
@@ -360,90 +369,111 @@ class MySQLSyncTool:
     
     def sync_database(self, db_name: str, source_conn: Dict[str, str], 
                      target_conn: Dict[str, str]) -> bool:
-        """Synchronize a single database using mysqldump -> mysql pipe"""
-        try:
-            logger.info(f"📋 Starting sync: {db_name}")
-            
-            # Build mysqldump command
-            dump_cmd = [
-                'mysqldump',
-                f'--host={source_conn["host"]}',
-                f'--port={source_conn["port"]}',
-                f'--user={source_conn["user"]}',
-                f'--password={source_conn["password"]}',
-                db_name
-            ]
-            
-            # Add dump options based on environment variables
-            if self.single_transaction:
-                dump_cmd.insert(-1, '--single-transaction')
-            if self.include_routines:
-                dump_cmd.insert(-1, '--routines')
-            if self.include_triggers:
-                dump_cmd.insert(-1, '--triggers')
-            if not self.lock_tables:
-                dump_cmd.insert(-1, '--lock-tables=false')
-            
-            # Add GTID settings to prevent "@@GLOBAL.GTID_PURGED cannot be changed" error
-            if self.set_gtid_purged:
-                dump_cmd.insert(-1, f'--set-gtid-purged={self.set_gtid_purged}')
-            
-            # Build mysql import command
-            import_cmd = [
-                'mysql',
-                f'--host={target_conn["host"]}',
-                f'--port={target_conn["port"]}',
-                f'--user={target_conn["user"]}',
-                f'--password={target_conn["password"]}',
-                db_name
-            ]
-            
-            logger.debug(f"Dump command: mysqldump [connection] {db_name}")
-            logger.debug(f"Import command: mysql [connection] {db_name}")
-            
-            # Execute pipe operation
-            start_time = datetime.now()
-            
-            dump_process = subprocess.Popen(
-                dump_cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True
-            )
-            
-            import_process = subprocess.Popen(
-                import_cmd,
-                stdin=dump_process.stdout,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True
-            )
-            
-            # Close dump stdout to allow proper pipe behavior
-            dump_process.stdout.close()
-            
-            # Wait for both processes and capture their output
-            _, import_error = import_process.communicate()
-            dump_output, dump_error = dump_process.communicate()
-            
-            end_time = datetime.now()
-            duration = end_time - start_time
-            
-            # Check results
-            if dump_process.returncode != 0:
-                logger.error(f"❌ Dump failed for {db_name}: {dump_error}")
-                return False
-            
-            if import_process.returncode != 0:
-                logger.error(f"❌ Import failed for {db_name}: {import_error}")
-                return False
-            
-            logger.info(f"✅ Successfully synced {db_name} (duration: {duration.total_seconds():.1f}s)")
-            return True
-            
-        except Exception as e:
-            logger.error(f"❌ Sync failed for {db_name}: {e}")
-            return False
+        """Synchronize a single database using mysqldump -> mysql pipe with retry logic"""
+        for attempt in range(1, self.max_retries + 1):
+            try:
+                if attempt > 1:
+                    logger.info(f"📋 Retry attempt {attempt}/{self.max_retries} for sync: {db_name}")
+                else:
+                    logger.info(f"📋 Starting sync: {db_name}")
+                
+                # Build mysqldump command
+                dump_cmd = [
+                    'mysqldump',
+                    f'--host={source_conn["host"]}',
+                    f'--port={source_conn["port"]}',
+                    f'--user={source_conn["user"]}',
+                    f'--password={source_conn["password"]}',
+                    db_name
+                ]
+                
+                # Add dump options based on environment variables
+                if self.single_transaction:
+                    dump_cmd.insert(-1, '--single-transaction')
+                if self.include_routines:
+                    dump_cmd.insert(-1, '--routines')
+                if self.include_triggers:
+                    dump_cmd.insert(-1, '--triggers')
+                if not self.lock_tables:
+                    dump_cmd.insert(-1, '--lock-tables=false')
+                
+                # Add GTID settings to prevent "@@GLOBAL.GTID_PURGED cannot be changed" error
+                if self.set_gtid_purged:
+                    dump_cmd.insert(-1, f'--set-gtid-purged={self.set_gtid_purged}')
+                
+                # Build mysql import command
+                import_cmd = [
+                    'mysql',
+                    f'--host={target_conn["host"]}',
+                    f'--port={target_conn["port"]}',
+                    f'--user={target_conn["user"]}',
+                    f'--password={target_conn["password"]}',
+                    db_name
+                ]
+                
+                logger.debug(f"Dump command: mysqldump [connection] {db_name}")
+                logger.debug(f"Import command: mysql [connection] {db_name}")
+                
+                # Execute pipe operation
+                start_time = datetime.now()
+                
+                dump_process = subprocess.Popen(
+                    dump_cmd,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True
+                )
+                
+                import_process = subprocess.Popen(
+                    import_cmd,
+                    stdin=dump_process.stdout,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True
+                )
+                
+                # Close dump stdout to allow proper pipe behavior
+                dump_process.stdout.close()
+                
+                # Wait for both processes and capture their output
+                _, import_error = import_process.communicate()
+                dump_output, dump_error = dump_process.communicate()
+                
+                end_time = datetime.now()
+                duration = end_time - start_time
+                
+                # Check results
+                if dump_process.returncode != 0:
+                    error_msg = f"Dump failed for {db_name}: {dump_error}"
+                    logger.error(f"❌ {error_msg}")
+                    if attempt < self.max_retries:
+                        logger.info(f"⏳ Waiting {self.retry_delay}s before retry...")
+                        time.sleep(self.retry_delay)
+                        continue
+                    return False
+                
+                if import_process.returncode != 0:
+                    error_msg = f"Import failed for {db_name}: {import_error}"
+                    logger.error(f"❌ {error_msg}")
+                    if attempt < self.max_retries:
+                        logger.info(f"⏳ Waiting {self.retry_delay}s before retry...")
+                        time.sleep(self.retry_delay)
+                        continue
+                    return False
+                
+                logger.info(f"✅ Successfully synced {db_name} (duration: {duration.total_seconds():.1f}s)")
+                return True
+                
+            except Exception as e:
+                error_msg = f"Sync failed for {db_name}: {e}"
+                logger.error(f"❌ {error_msg}")
+                if attempt < self.max_retries:
+                    logger.info(f"⏳ Waiting {self.retry_delay}s before retry...")
+                    time.sleep(self.retry_delay)
+                    continue
+                
+        logger.error(f"❌ All {self.max_retries} retry attempts failed for {db_name}")
+        return False
     
     def batch_sync(self, databases: List[str], source_conn: Dict[str, str], 
                    target_conn: Dict[str, str]) -> Dict[str, bool]:
@@ -753,6 +783,8 @@ class MySQLSyncTool:
         print(f"  TIMEOUT=30                           # Connection timeout in seconds")
         print(f"  BATCH_SIZE=100                       # Batch operation size")
         print(f"  MAX_HISTORY_RECORDS=50               # Maximum sync history records")
+        print(f"  MAX_RETRIES=3                        # Maximum retry attempts for failed syncs")
+        print(f"  RETRY_DELAY=2                        # Delay in seconds between retry attempts")
         print(f"  DEBUG=true/false                     # Enable debug logging")
         print(f"  SET_GTID_PURGED=OFF                  # GTID handling (OFF/AUTO/ON) - prevents GTID errors")
 

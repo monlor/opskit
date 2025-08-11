@@ -68,6 +68,7 @@ class MySQLSyncTool:
         self.include_routines = get_env_var('INCLUDE_ROUTINES', True, bool)
         self.include_triggers = get_env_var('INCLUDE_TRIGGERS', True, bool)
         self.lock_tables = get_env_var('LOCK_TABLES', False, bool)
+        self.set_gtid_purged = get_env_var('SET_GTID_PURGED', 'OFF', str)
         
         logger.info(f"🚀 Starting {self.tool_name}")
         if self.debug:
@@ -382,6 +383,10 @@ class MySQLSyncTool:
                 dump_cmd.insert(-1, '--triggers')
             if not self.lock_tables:
                 dump_cmd.insert(-1, '--lock-tables=false')
+            
+            # Add GTID settings to prevent "@@GLOBAL.GTID_PURGED cannot be changed" error
+            if self.set_gtid_purged:
+                dump_cmd.insert(-1, f'--set-gtid-purged={self.set_gtid_purged}')
             
             # Build mysql import command
             import_cmd = [
@@ -749,6 +754,7 @@ class MySQLSyncTool:
         print(f"  BATCH_SIZE=100                       # Batch operation size")
         print(f"  MAX_HISTORY_RECORDS=50               # Maximum sync history records")
         print(f"  DEBUG=true/false                     # Enable debug logging")
+        print(f"  SET_GTID_PURGED=OFF                  # GTID handling (OFF/AUTO/ON) - prevents GTID errors")
 
 
 @click.command()

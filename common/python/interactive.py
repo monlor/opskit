@@ -94,9 +94,10 @@ class InteractiveComponents:
             try:
                 if password:
                     user_input = getpass.getpass(display_prompt)
-                elif PROMPT_TOOLKIT_AVAILABLE and completions:
-                    completer = WordCompleter(completions)
-                    user_input = prompt(display_prompt, completer=completer)
+                # Force simple input for better OpsKit compatibility
+                # elif PROMPT_TOOLKIT_AVAILABLE and completions:
+                #     completer = WordCompleter(completions)
+                #     user_input = prompt(display_prompt, completer=completer)
                 else:
                     user_input = input(display_prompt)
                 
@@ -147,15 +148,8 @@ class InteractiveComponents:
         Returns:
             True if confirmed, False otherwise
         """
-        # Use prompt_toolkit if available for better UX
-        if PROMPT_TOOLKIT_AVAILABLE:
-            try:
-                return confirm(
-                    HTML(f"<cyan>{message}</cyan>"),
-                    default=default
-                )
-            except KeyboardInterrupt:
-                return False
+        # Force simple input for better compatibility with OpsKit subprocess handling
+        # prompt_toolkit can cause issues when tools are run through subprocess
         
         # Fallback to simple input
         default_char = 'Y' if default else 'N'

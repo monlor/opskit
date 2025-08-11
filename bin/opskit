@@ -17,7 +17,7 @@ Usage:
 
 import os
 import sys
-import argparse
+import click
 from pathlib import Path
 
 # Discover OpsKit root directory and virtual environment
@@ -53,69 +53,35 @@ def print_version():
     print(f"Platform: {PlatformUtils.get_platform_info()}")
 
 
-def print_help():
-    """Print help information"""
-    help_text = """
-OpsKit - Unified Operations Tool Management Platform
-
-Usage:
-    opskit                  Interactive mode - browse and run tools
-    opskit list             List all available tools by category
-    opskit run <tool>       Run a specific tool by name
-    opskit search <query>   Search tools by name or description
-    opskit config           Configuration management interface
-    opskit update           Update OpsKit to latest version (git pull)
-    opskit status           Show system status and health check
-    opskit version          Show version information
-    opskit help             Show this help message
-
-Examples:
-    opskit                  # Enter interactive mode
-    opskit list             # Show all tools
-    opskit run mysql-sync   # Run MySQL sync tool
-    opskit config mysql-sync  # Configure MySQL sync tool
-    
-Environment Variables:
-    OPSKIT_HOME            Custom OpsKit installation directory
-    OPSKIT_LOG_LEVEL       Log level (DEBUG, INFO, WARNING, ERROR)
-    
-For more information, visit: https://github.com/monlor/opskit
-"""
-    print(help_text.strip())
+def handle_error(e, debug):
+    """Handle errors consistently"""
+    if debug:
+        import traceback
+        traceback.print_exc()
+    else:
+        print(f"Error: {e}")
+    sys.exit(1)
 
 
-def main():
-    """Main entry point"""
-    parser = argparse.ArgumentParser(
-        prog='opskit',
-        description='Unified Operations Tool Management Platform',
-        add_help=False
-    )
+# Global debug flag for error handling
+_debug_mode = False
+
+
+@click.group(invoke_without_command=True)
+@click.option('--debug', is_flag=True, help='Enable debug mode')
+@click.option('--version', '-v', is_flag=True, help='Show version information')
+@click.pass_context
+def cli(ctx, debug, version):
+    """OpsKit - Unified Operations Tool Management Platform"""
+    global _debug_mode
+    _debug_mode = debug
     
-    parser.add_argument('command', nargs='?', help='Command to execute')
-    parser.add_argument('args', nargs='*', help='Command arguments')
-    parser.add_argument('--help', '-h', action='store_true', help='Show help message')
-    parser.add_argument('--version', '-v', action='store_true', help='Show version')
-    parser.add_argument('--debug', action='store_true', help='Enable debug mode')
-    
-    args, unknown_args = parser.parse_known_args()
-    
-    # If we have unknown args and the command is 'run', treat them as tool arguments
-    if args.command == 'run' and unknown_args:
-        args.args.extend(unknown_args)
-    
-    # Handle version and help flags
-    if args.version:
+    if version:
         print_version()
         return
     
-    # Only show main help if not running a specific tool
-    if args.help and args.command != 'run':
-        print_help()
-        return
-    
     # Set debug mode
-    if args.debug:
+    if debug:
         os.environ['OPSKIT_LOG_LEVEL'] = 'DEBUG'
     
     # Ensure data directory exists for environment variables
@@ -126,75 +92,106 @@ def main():
         print(f"Error creating data directory: {e}")
         sys.exit(1)
     
-    # Initialize CLI
+    # If no command provided, enter interactive mode
+    if ctx.invoked_subcommand is None:
+        try:
+            opskit_cli = OpsKitCLI(debug=debug)
+            opskit_cli.interactive_mode()
+        except Exception as e:
+            handle_error(e, debug)
+
+
+@cli.command()
+@click.argument('category', required=False)
+@click.option('--debug', is_flag=True, help='Enable debug mode')
+def list(category, debug):
+    """List all available tools by category"""
     try:
-        cli = OpsKitCLI(debug=args.debug)
+        opskit_cli = OpsKitCLI(debug=debug or _debug_mode)
+        opskit_cli.list_tools(category=category)
     except Exception as e:
-        print(f"Error initializing OpsKit CLI: {e}")
-        sys.exit(1)
-    
-    # Handle commands
-    command = args.command
-    command_args = args.args
+        handle_error(e, debug or _debug_mode)
+
+
+@cli.command(context_settings=dict(ignore_unknown_options=True, allow_extra_args=True, allow_interspersed_args=False, help_option_names=[]))
+@click.argument('tool_name')
+@click.option('--debug', is_flag=True, help='Enable debug mode')
+@click.pass_context
+def run(ctx, tool_name, debug):
+    """Run a specific tool with arguments"""
+    # All remaining arguments after tool_name are passed to the tool
+    tool_args = ctx.args
     
     try:
-        if command is None:
-            # No command provided - enter interactive mode
-            cli.interactive_mode()
-        
-        elif command == 'list':
-            cli.list_tools(category=command_args[0] if command_args else None)
-        
-        elif command == 'run':
-            if not command_args:
-                print("Error: Tool name required for 'run' command")
-                print("Usage: opskit run <tool-name> [tool-args...]")
-                sys.exit(1)
-            tool_name = command_args[0]
-            tool_args = command_args[1:] if len(command_args) > 1 else []
-            exit_code = cli.run_tool(tool_name, tool_args)
-            sys.exit(exit_code)
-        
-        elif command == 'search':
-            if not command_args:
-                print("Error: Search query required for 'search' command")
-                print("Usage: opskit search <query>")
-                sys.exit(1)
-            cli.search_tools(' '.join(command_args))
-        
-        elif command == 'config':
-            if command_args:
-                cli.configure_tool(command_args[0])
-            else:
-                cli.configuration_menu()
-        
-        elif command == 'update':
-            cli.update_opskit()
-        
-        elif command == 'status':
-            cli.show_status()
-        
-        elif command == 'version':
-            print_version()
-        
-        elif command == 'help':
-            print_help()
-        
+        opskit_cli = OpsKitCLI(debug=debug or _debug_mode)
+        exit_code = opskit_cli.run_tool(tool_name, tool_args)
+        sys.exit(exit_code)
+    except Exception as e:
+        handle_error(e, debug or _debug_mode)
+
+
+@cli.command()
+@click.argument('query')
+@click.option('--debug', is_flag=True, help='Enable debug mode')
+def search(query, debug):
+    """Search tools by name or description"""
+    try:
+        opskit_cli = OpsKitCLI(debug=debug or _debug_mode)
+        opskit_cli.search_tools(query)
+    except Exception as e:
+        handle_error(e, debug or _debug_mode)
+
+
+@cli.command()
+@click.argument('tool_name', required=False)
+@click.option('--debug', is_flag=True, help='Enable debug mode')
+def config(tool_name, debug):
+    """Configuration management interface"""
+    try:
+        opskit_cli = OpsKitCLI(debug=debug or _debug_mode)
+        if tool_name:
+            opskit_cli.configure_tool(tool_name)
         else:
-            print(f"Error: Unknown command '{command}'")
-            print("Use 'opskit help' for usage information")
-            sys.exit(1)
-    
+            opskit_cli.configuration_menu()
+    except Exception as e:
+        handle_error(e, debug or _debug_mode)
+
+
+@cli.command()
+@click.option('--debug', is_flag=True, help='Enable debug mode')
+def update(debug):
+    """Update OpsKit to latest version (git pull)"""
+    try:
+        opskit_cli = OpsKitCLI(debug=debug or _debug_mode)
+        opskit_cli.update_opskit()
+    except Exception as e:
+        handle_error(e, debug or _debug_mode)
+
+
+@cli.command()
+@click.option('--debug', is_flag=True, help='Enable debug mode')
+def status(debug):
+    """Show system status and health check"""
+    try:
+        opskit_cli = OpsKitCLI(debug=debug or _debug_mode)
+        opskit_cli.show_status()
+    except Exception as e:
+        handle_error(e, debug or _debug_mode)
+
+
+@cli.command()
+def version():
+    """Show version information"""
+    print_version()
+
+
+def main():
+    """Main entry point"""
+    try:
+        cli()
     except KeyboardInterrupt:
         print("\nOperation cancelled by user")
         sys.exit(0)
-    except Exception as e:
-        if args.debug:
-            import traceback
-            traceback.print_exc()
-        else:
-            print(f"Error: {e}")
-        sys.exit(1)
 
 
 if __name__ == '__main__':

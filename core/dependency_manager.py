@@ -550,7 +550,8 @@ class DependencyManager:
                     print(f"Executing: {' '.join(cmd)}")
                 
                 # Execute tool directly (inherits stdin/stdout/stderr)
-                result = subprocess.run(cmd)
+                # Use subprocess.run with proper stdio inheritance for interactive tools
+                result = subprocess.run(cmd, stdin=sys.stdin, stdout=sys.stdout, stderr=sys.stderr)
                 return result.returncode
             
             finally:

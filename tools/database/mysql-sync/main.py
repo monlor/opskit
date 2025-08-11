@@ -417,16 +417,15 @@ class MySQLSyncTool:
             # Close dump stdout to allow proper pipe behavior
             dump_process.stdout.close()
             
-            # Wait for both processes
+            # Wait for both processes and capture their output
             _, import_error = import_process.communicate()
-            dump_process.wait()
+            dump_output, dump_error = dump_process.communicate()
             
             end_time = datetime.now()
             duration = end_time - start_time
             
             # Check results
             if dump_process.returncode != 0:
-                _, dump_error = dump_process.communicate()
                 logger.error(f"❌ Dump failed for {db_name}: {dump_error}")
                 return False
             
@@ -775,4 +774,6 @@ def main(config: Optional[str], history: bool, connections: bool, help_tool: boo
 
 
 if __name__ == '__main__':
+    # Let Click handle command line arguments properly
+    # Click will automatically process sys.argv when main() is called as a CLI command
     main()

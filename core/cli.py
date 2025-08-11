@@ -47,6 +47,7 @@ except ImportError:
 from .env import env, get_tool_temp_dir, load_tool_env, get_config_summary
 from .platform_utils import PlatformUtils
 from .dependency_manager import DependencyManager
+from .theme import theme_manager
 import yaml
 
 
@@ -439,19 +440,8 @@ class OpsKitCLI:
             tool_list_window,
         ])
         
-        # Style
-        style = Style.from_dict({
-            'title': '#00ff00 bold',
-            'search-label': '#ffff00',
-            'header': '#87d7ff bold',
-            'separator': '#666666',
-            'selected': '#000000 bg:#87d7ff',
-            'normal': '#ffffff',
-            'category': '#ffff00',
-            'description': '#aaaaaa',
-            'keybind': '#87d7ff',
-            'no-results': '#ff0000',
-        })
+        # Style - use theme manager for adaptive colors
+        style = theme_manager.get_style(env.ui_theme)
         
         # Create and run application
         app = Application(
@@ -653,8 +643,57 @@ class OpsKitCLI:
     
     def configuration_menu(self) -> None:
         """Configuration management menu"""
-        self._print("Configuration management is handled through environment variables.", "blue")
-        self._print("Set variables in .env files within tool directories or use system environment variables.", "dim")
+        self._print("\n📋 Configuration Menu", "bold blue")
+        
+        # Show current theme status
+        theme_info = theme_manager.get_theme_info(env.ui_theme)
+        
+        config_info = f"Current Settings:\n"
+        config_info += f"  Theme: {env.ui_theme} (active: {theme_info['active_theme']})\n"
+        config_info += f"  Detected Background: {theme_info['detected_background']}\n\n"
+        
+        config_info += f"Theme Options (set in data/.env):\n"
+        config_info += f"  OPSKIT_UI_THEME=auto   (detect terminal background)\n"
+        config_info += f"  OPSKIT_UI_THEME=light  (for light terminals)\n"
+        config_info += f"  OPSKIT_UI_THEME=dark   (for dark terminals)\n\n"
+        
+        config_info += f"Other configurations are managed through environment variables."
+        
+        self._print_panel(config_info, "OpsKit Configuration", "cyan")
+        
+        # Show test colors
+        if self._confirm("Test theme visibility?", False):
+            self._test_theme_visibility()
+    
+    def _test_theme_visibility(self) -> None:
+        """Test theme visibility with sample text"""
+        self._print("\n🎨 Theme Visibility Test", "bold blue")
+        
+        current_theme = theme_manager.get_theme_mode(env.ui_theme)
+        self._print(f"Current active theme: {current_theme}", "yellow")
+        
+        if rich_available and self.console:
+            # Test different colors based on current theme
+            if current_theme == "dark":
+                self.console.print("→ Normal text (white on dark)", style="white")
+                self.console.print("→ Selected item", style="black on bright_cyan")
+                self.console.print("→ Category text", style="yellow")
+                self.console.print("→ Description text", style="bright_black")
+                self.console.print("→ Header text", style="bright_cyan bold")
+            else:  # light theme
+                self.console.print("→ Normal text (black on light)", style="black")
+                self.console.print("→ Selected item", style="white on blue")
+                self.console.print("→ Category text", style="#cc6600")
+                self.console.print("→ Description text", style="#666666")
+                self.console.print("→ Header text", style="blue bold")
+            
+            self.console.print("→ Error text", style="red")
+        else:
+            self._print("→ Normal text should be clearly visible")
+            self._print("→ Categories and descriptions in different shades")
+        
+        self._print(f"\n💡 If text is hard to see, set OPSKIT_UI_THEME=light or dark in data/.env")
+        input("Press Enter to continue...")
     
     def update_opskit(self) -> None:
         """Update OpsKit using git pull"""

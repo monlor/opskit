@@ -74,6 +74,11 @@ class EnvConfig:
     @property
     def author(self) -> str:
         return os.getenv('OPSKIT_AUTHOR', 'OpsKit Development Team')
+    
+    @property
+    def ui_theme(self) -> str:
+        """UI theme setting: auto, light, dark"""
+        return os.getenv('OPSKIT_UI_THEME', 'auto').lower()
 
 
 # Global env object

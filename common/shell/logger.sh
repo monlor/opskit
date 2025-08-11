@@ -1,6 +1,6 @@
 #!/bin/bash
 # OpsKit Shell Logger Functions
-# Provides unified logging interface using Python backend
+# Provides unified logging interface using pure shell implementation
 
 # Ensure OPSKIT_BASE_PATH is set
 if [[ -z "${OPSKIT_BASE_PATH:-}" ]]; then
@@ -9,35 +9,104 @@ if [[ -z "${OPSKIT_BASE_PATH:-}" ]]; then
     export OPSKIT_BASE_PATH
 fi
 
+# ==================== Configuration ====================
+
+# Configuration variables are injected by CLI, use defaults if not set
+
+# Map log levels to numeric values for filtering
+declare -A LOG_LEVELS=(
+    ["DEBUG"]=10
+    ["INFO"]=20
+    ["WARNING"]=30
+    ["ERROR"]=40
+    ["CRITICAL"]=50
+)
+
+# Get logs directory - only create if file logging is enabled
+_get_logs_dir() {
+    local logs_dir="${OPSKIT_PATHS_LOGS_DIR:-logs}"
+    if [[ ! "$logs_dir" = /* ]]; then
+        logs_dir="${OPSKIT_BASE_PATH}/${logs_dir}"
+    fi
+    echo "$logs_dir"
+}
+
 # ==================== Core Logging Functions ====================
 
-# Internal logging function using Python backend
-_python_log() {
+# Get current timestamp in ISO format
+_get_timestamp() {
+    date '+%Y-%m-%d %H:%M:%S'
+}
+
+# Check if log level should be output
+_should_log() {
+    local level="$1"
+    local current_log_level="${OPSKIT_LOGGING_CONSOLE_LEVEL:-INFO}"
+    local current_level_value="${LOG_LEVELS[$current_log_level]:-20}"
+    local message_level_value="${LOG_LEVELS[$level]:-20}"
+    
+    [[ $message_level_value -ge $current_level_value ]]
+}
+
+# Internal logging function using pure shell
+_shell_log() {
     local level="$1"
     local message="$2"
     local tool_name="${3:-shell}"
     
-    # Use Python logger for consistent logging - no fallbacks
-    python3 -c "
-import sys
-sys.path.insert(0, '${OPSKIT_BASE_PATH}/common/python')
-from logger import get_logger
-logger = get_logger('shell', '$tool_name')
-logger.${level,,}('$message')
-"
+    # Check if we should log this level
+    if ! _should_log "$level"; then
+        return 0
+    fi
+    
+    local timestamp
+    timestamp="$(_get_timestamp)"
+    
+    # Console output: simple format (just message)
+    local console_message="$message"
+    
+    # Color codes for different levels
+    local color_reset="\033[0m"
+    local color_code=""
+    case "$level" in
+        DEBUG)   color_code="\033[36m" ;;  # Cyan
+        INFO)    color_code="\033[32m" ;;  # Green
+        WARNING) color_code="\033[33m" ;;  # Yellow
+        ERROR)   color_code="\033[31m" ;;  # Red
+        CRITICAL) color_code="\033[35m" ;; # Magenta
+    esac
+    
+    # Output to console with color (simple format - just message)
+    if [[ -t 2 ]]; then
+        # Terminal supports colors
+        echo -e "${color_code}${console_message}${color_reset}" >&2
+    else
+        # No color support
+        echo "$console_message" >&2
+    fi
+    
+    # Output to log file if enabled
+    if [[ "${OPSKIT_LOGGING_FILE_ENABLED}" == "true" ]]; then
+        local logs_dir
+        logs_dir="$(_get_logs_dir)"
+        mkdir -p "$logs_dir"
+        local log_file="$logs_dir/opskit.log"
+        local detailed_message="$timestamp $level [$tool_name] $message"
+        echo "$detailed_message" >> "$log_file"
+    fi
 }
 
 # Basic logging functions
 log_debug() {
-    _python_log "DEBUG" "$1" "${OPSKIT_TOOL_NAME:-}"
+    _shell_log "DEBUG" "$1" "${OPSKIT_TOOL_NAME:-}"
 }
 
 log_info() {
-    _python_log "INFO" "$1" "${OPSKIT_TOOL_NAME:-}"
+    _shell_log "INFO" "$1" "${OPSKIT_TOOL_NAME:-}"
 }
 
 log_warn() {
-    _python_log "WARNING" "$1" "${OPSKIT_TOOL_NAME:-}"
+    _shell_log "WARNING" "$1" "${OPSKIT_TOOL_NAME:-}"
 }
 
 log_warning() {
@@ -45,11 +114,11 @@ log_warning() {
 }
 
 log_error() {
-    _python_log "ERROR" "$1" "${OPSKIT_TOOL_NAME:-}"
+    _shell_log "ERROR" "$1" "${OPSKIT_TOOL_NAME:-}"
 }
 
 log_fatal() {
-    _python_log "CRITICAL" "$1" "${OPSKIT_TOOL_NAME:-}"
+    _shell_log "CRITICAL" "$1" "${OPSKIT_TOOL_NAME:-}"
 }
 
 log_critical() {
@@ -188,12 +257,8 @@ success_exit() {
     exit 0
 }
 
-# Export all functions
-export -f _python_log log_debug log_info log_warn log_warning log_error log_fatal log_critical
-export -f tool_start tool_complete tool_error
-export -f step_start step_complete step_error
-export -f dependency_check config_loaded network_operation file_operation
-export -f die success_exit
+# Functions are available when this file is sourced
+# No explicit exports needed since functions are defined in the current shell
 
 # If running this file directly, show available functions
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then

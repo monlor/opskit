@@ -244,7 +244,17 @@ class DependencyManager:
         missing_deps = []
         tool_path = Path(tool_info['path'])
         
-        # First check for tool-specific dependency file
+        # Method 1: Check explicit dependencies from tools.yaml (highest priority)
+        declared_deps = tool_info.get('dependencies', [])
+        if declared_deps:
+            if self.debug:
+                print(f"Checking explicitly declared dependencies for {tool_info['name']}: {declared_deps}")
+            for dep_name in declared_deps:
+                if not self._is_dependency_satisfied(dep_name):
+                    missing_deps.append(dep_name)
+            return missing_deps
+        
+        # Method 2: Check for tool-specific dependency file
         deps_file = tool_path / 'system_deps.txt'
         if deps_file.exists():
             try:
@@ -256,32 +266,9 @@ class DependencyManager:
             except Exception:
                 pass
         
-        # Fallback: analyze tool content for specific dependencies
-        if not self.dependencies_config:
-            return missing_deps
-            
-        main_file = tool_path / tool_info['main_file']
-        if not main_file.exists():
-            return missing_deps
-        
-        try:
-            with open(main_file, 'r', encoding='utf-8') as f:
-                content = f.read().lower()
-            
-            system_deps = self.dependencies_config.get('system_dependencies', {})
-            
-            # Only check dependencies whose commands appear in the tool's content
-            for dep_name, dep_config in system_deps.items():
-                commands = dep_config.get('commands', [])
-                if commands:
-                    # Check if any command from this dependency appears in the tool content
-                    if any(cmd in content for cmd in commands):
-                        # Check if the dependency is actually missing
-                        if not self._is_dependency_satisfied(dep_name):
-                            missing_deps.append(dep_name)
-        
-        except Exception:
-            pass
+        # No dependencies declared - skip dependency checking
+        if self.debug:
+            print(f"No dependencies declared for {tool_info['name']}, skipping dependency checks")
         
         return missing_deps
     

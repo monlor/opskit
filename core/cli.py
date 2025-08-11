@@ -203,6 +203,7 @@ class OpsKitCLI:
             # Get version and description from tools.yaml
             version = "1.0.0"  # default version
             description = "No description available"
+            dependencies = []  # default no dependencies
             
             # Load tools.yaml for metadata
             tools_yaml_path = self.opskit_root / 'config' / 'tools.yaml'
@@ -212,10 +213,12 @@ class OpsKitCLI:
                         tools_config = yaml.safe_load(f)
                     
                     if tools_config and 'tools' in tools_config:
-                        tool_info = tools_config['tools'].get(category, {}).get(tool_name, {})
-                        if tool_info:
-                            version = tool_info.get('version', version)
-                            description = tool_info.get('description', description)
+                        tool_info_config = tools_config['tools'].get(category, {}).get(tool_name, {})
+                        if tool_info_config:
+                            version = tool_info_config.get('version', version)
+                            description = tool_info_config.get('description', description)
+                            # Extract dependencies from tools.yaml
+                            dependencies = tool_info_config.get('dependencies', [])
                 except Exception:
                     pass
             
@@ -235,7 +238,8 @@ class OpsKitCLI:
                 'type': tool_type,
                 'has_python_deps': has_python_deps,
                 'has_env_file': has_env_file,
-                'category': category
+                'category': category,
+                'dependencies': dependencies
             }
         
         except Exception as e:

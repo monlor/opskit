@@ -37,7 +37,7 @@ system_dependencies:
       fedora: net-tools
       arch: net-tools
       macos: null  # Built-in
-    commands: [netstat, ss, ping]
+    commands: [netstat, ping]
     
   nmap:
     description: Network scanner

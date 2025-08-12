@@ -13,7 +13,7 @@ import sys
 import logging
 import logging.handlers
 from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from datetime import datetime
 
 # Import OpsKit environment configuration using OPSKIT_BASE_PATH
@@ -38,7 +38,7 @@ class ColoredFormatter(logging.Formatter):
     
     COLORS = {
         'DEBUG': Fore.CYAN if colorama_available else '',
-        'INFO': Fore.GREEN if colorama_available else '',
+        'INFO': '',  # No color for INFO logs (black/default)
         'WARNING': Fore.YELLOW if colorama_available else '',
         'ERROR': Fore.RED if colorama_available else '',
         'CRITICAL': Fore.RED + Style.BRIGHT if colorama_available else '',
@@ -101,12 +101,15 @@ class OpsKitLogger:
         cls._log_dir.mkdir(parents=True, exist_ok=True)
         
         # Set configuration from environment variables
-        cls._console_level = getattr(logging, (console_level or env.log_level).upper())
-        cls._file_level = getattr(logging, (file_level or env.log_file_level).upper())
+        console_level_to_use = console_level or (env.log_level if env_available else 'INFO')
+        file_level_to_use = file_level or (env.log_file_level if env_available else 'DEBUG')
+        
+        cls._console_level = getattr(logging, console_level_to_use.upper())
+        cls._file_level = getattr(logging, file_level_to_use.upper())
         cls._console_simple_format = (console_simple_format 
-            if console_simple_format is not None else env.log_simple_format)
+            if console_simple_format is not None else (env.log_simple_format if env_available else True))
         cls._file_enabled = (file_enabled 
-            if file_enabled is not None else env.log_file_enabled)
+            if file_enabled is not None else (env.log_file_enabled if env_available else False))
         
         cls._initialized = True
     
@@ -133,6 +136,7 @@ class OpsKitLogger:
         
         # Create new logger
         logger = logging.getLogger(logger_key)
+        # Set logger to the lowest level, let handlers control actual filtering
         logger.setLevel(logging.DEBUG)
         
         # Remove existing handlers to avoid duplicates
@@ -340,3 +344,5 @@ def get_log_info() -> Dict[str, Any]:
         'active_loggers': list(OpsKitLogger._loggers.keys()),
         'log_files': OpsKitLogger.get_log_files()
     }
+
+

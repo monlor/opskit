@@ -54,10 +54,13 @@ import yaml
 class OpsKitCLI:
     """Interactive command line interface for OpsKit"""
     
-    def __init__(self, debug: bool = False):
+    def __init__(self):
         """Initialize CLI interface"""
-        self.debug = debug
         self.console = Console() if rich_available else None
+        
+        # Set up logging
+        import logging
+        self.logger = logging.getLogger(__name__)
         
         # Get OpsKit root directory
         current_file = Path(__file__).resolve()
@@ -71,7 +74,7 @@ class OpsKitCLI:
         
         # Initialize managers
         self.platform_utils = PlatformUtils()
-        self.dependency_manager = DependencyManager(self.opskit_root, debug=debug)
+        self.dependency_manager = DependencyManager(self.opskit_root)
     
     def _print(self, message: str, style: Optional[str] = None) -> None:
         """Print message with optional styling"""
@@ -244,8 +247,7 @@ class OpsKitCLI:
             }
         
         except Exception as e:
-            if self.debug:
-                self._print(f"Error parsing tool {tool_dir}: {e}", "red")
+            self.logger.debug(f"Error parsing tool {tool_dir}: {e}")
             return None
     
     def interactive_mode(self) -> None:
@@ -564,13 +566,12 @@ class OpsKitCLI:
             env_vars['TOOL_NAME'] = found_tool.get('display_name', found_tool['name'])
             env_vars['TOOL_VERSION'] = tool_version
             
-            if self.debug and env_vars:
-                self._print(f"Debug: Loaded {len(env_vars)} environment variables", "cyan")
+            if env_vars:
+                self.logger.debug(f"Loaded {len(env_vars)} environment variables")
                 for key, value in list(env_vars.items())[:5]:  # Show first 5
-                    self._print(f"  {key}={value}", "dim")
+                    self.logger.debug(f"  {key}={value}")
                 if len(env_vars) > 5:
-                    self._print(f"  ... and {len(env_vars) - 5} more", "dim")
-                self._print("")
+                    self.logger.debug(f"  ... and {len(env_vars) - 5} more")
             
             # Set environment variables in current process
             for key, value in env_vars.items():
@@ -581,9 +582,7 @@ class OpsKitCLI:
             
         except Exception as e:
             self._print(f"❌ Error running tool: {e}", "red")
-            if self.debug:
-                import traceback
-                traceback.print_exc()
+            self.logger.debug("Full traceback:", exc_info=True)
             return 1
     
     def search_tools(self, query: str) -> None:

@@ -20,10 +20,9 @@ import fnmatch
 # Import OpsKit common libraries
 sys.path.insert(0, os.path.join(os.environ['OPSKIT_BASE_PATH'], 'common/python'))
 
-from logger import get_logger
+from interactive import get_interactive
 from storage import get_storage
 from utils import run_command, timestamp, get_env_var
-from interactive import get_input, confirm, select_from_list, delete_confirm
 
 # Third-party imports
 try:
@@ -35,8 +34,6 @@ try:
     )
     from boto3.s3.transfer import TransferConfig
     import click
-    from colorama import init, Fore, Style, Back
-    init(autoreset=True)
     
     # Optional dependencies
     try:
@@ -57,7 +54,7 @@ except ImportError as e:
     sys.exit(1)
 
 # Initialize OpsKit components
-logger = get_logger(__name__)
+logger = get_interactive(__name__, 's3-sync')
 storage = get_storage('s3-sync')
 
 
@@ -212,22 +209,22 @@ class S3ConnectionManager:
         cached_connections = self.list_cached_connections()
         
         if not cached_connections:
-            print(f"{Fore.YELLOW}No cached S3 connections available{Style.RESET_ALL}")
+            logger.warning_msg("No cached S3 connections available")
             return None
         
-        print(f"\n{Fore.CYAN}=== Cached S3 Connections ==={Style.RESET_ALL}")
+        logger.subsection("Cached S3 Connections")
         for i, conn in enumerate(cached_connections, 1):
-            print(f"{Fore.YELLOW}{i:2d}.{Style.RESET_ALL} {conn.display}")
-            print(f"    Last used: {conn.last_used}")
+            logger.info(f"{i:2d}. {conn.display}")
+            logger.info(f"    Last used: {conn.last_used}")
         
-        print(f"\n{Fore.CYAN}Options:{Style.RESET_ALL}")
-        print("  Select connection: 1, 2, 3...")
-        print("  Create new connection: new")
-        print("  Cancel: press Ctrl+C")
+        logger.info("\nOptions:")
+        logger.info("  Select connection: 1, 2, 3...")
+        logger.info("  Create new connection: new")
+        logger.info("  Cancel: press Ctrl+C")
         
         try:
             while True:
-                selection = input(f"\n{Fore.CYAN}Your choice: {Style.RESET_ALL}").strip().lower()
+                selection = logger.get_input("Your choice").strip().lower()
                 
                 if selection == 'new':
                     return None  # Signal to create new connection
@@ -241,20 +238,20 @@ class S3ConnectionManager:
                         self.connections_cache[selected_conn.name]['last_used'] = timestamp()
                         self.save_cached_connections()
                         
-                        print(f"{Fore.GREEN}✅ Selected connection: {selected_conn.display}{Style.RESET_ALL}")
+                        logger.success(f"Selected connection: {selected_conn.display}")
                         return selected_conn
                     else:
-                        print(f"{Fore.RED}Invalid selection. Please choose 1-{len(cached_connections)} or 'new'{Style.RESET_ALL}")
+                        logger.failure(f"Invalid selection. Please choose 1-{len(cached_connections)} or 'new'")
                 except ValueError:
-                    print(f"{Fore.RED}Invalid input. Please enter a number or 'new'{Style.RESET_ALL}")
+                    logger.failure("Invalid input. Please enter a number or 'new'")
         
         except KeyboardInterrupt:
-            logger.info("Connection selection cancelled by user")
+            logger.user_cancelled("connection selection")
             return None
 
     def get_connection_info(self) -> Optional[S3ConnectionInfo]:
         """Interactive S3 connection information collection"""
-        print(f"\n{Fore.CYAN}=== S3 Connection Setup ==={Style.RESET_ALL}")
+        logger.section("S3 Connection Setup")
         
         # First, show cached connections if available
         if self.connections_cache and self.cache_connections:
@@ -265,10 +262,10 @@ class S3ConnectionManager:
             # If user chose 'new' or selection failed, continue to manual input
         
         # Manual connection setup
-        print(f"\n{Fore.CYAN}=== Create New S3 Connection ==={Style.RESET_ALL}")
+        logger.subsection("Create New S3 Connection")
         
         # Ask for connection name
-        name = get_input(
+        name = logger.get_input(
             "Enter a name for this S3 connection",
             validator=lambda x: len(x.strip()) > 0,
             error_message="Connection name cannot be empty"
@@ -276,8 +273,8 @@ class S3ConnectionManager:
         
         # Check if name already exists and offer to overwrite
         if name in self.connections_cache:
-            if not confirm(f"Connection '{name}' already exists. Overwrite?", default=False):
-                print(f"{Fore.YELLOW}Please choose a different name{Style.RESET_ALL}")
+            if not logger.confirm(f"Connection '{name}' already exists. Overwrite?", default=False):
+                logger.warning_msg("Please choose a different name")
                 return self.get_connection_info()
         
         # List available AWS profiles
@@ -288,14 +285,14 @@ class S3ConnectionManager:
         
         if len(profiles) == 1:
             profile = profiles[0]
-            print(f"Using AWS profile: {profile}")
+            logger.info(f"Using AWS profile: {profile}")
         else:
-            print(f"\n{Fore.CYAN}Available AWS profiles:{Style.RESET_ALL}")
+            logger.subsection("Available AWS profiles")
             for i, p in enumerate(profiles, 1):
                 region = self.get_profile_region(p)
-                print(f"{Fore.YELLOW}{i:2d}.{Style.RESET_ALL} {p} {Fore.DIM}({region}){Style.RESET_ALL}")
+                logger.info(f"{i:2d}. {p} ({region})")
             
-            profile_choice = get_input(
+            profile_choice = logger.get_input(
                 "Select AWS profile",
                 default="1",
                 validator=lambda x: x.isdigit() and 1 <= int(x) <= len(profiles),
@@ -305,10 +302,10 @@ class S3ConnectionManager:
         
         # Get region
         default_region = self.get_profile_region(profile)
-        region = get_input("AWS Region", default=default_region)
+        region = logger.get_input("AWS Region", default=default_region)
         
         # Get optional endpoint URL for S3-compatible services
-        endpoint_url = get_input("S3 Endpoint URL (leave empty for AWS S3)", default="")
+        endpoint_url = logger.get_input("S3 Endpoint URL (leave empty for AWS S3)", default="")
         endpoint_url = endpoint_url.strip() or None
         
         connection_info = S3ConnectionInfo(
@@ -319,11 +316,11 @@ class S3ConnectionManager:
         )
         
         # Test connection before caching
-        print(f"\n{Fore.CYAN}Testing S3 connection...{Style.RESET_ALL}")
+        logger.progress("Testing S3 connection...")
         if self.test_connection(connection_info):
             # Ask if user wants to cache this connection
             if self.cache_connections:
-                if confirm("Save this connection for future use?", default=True):
+                if logger.confirm("Save this connection for future use?", default=True):
                     self.connections_cache[name] = {
                         'profile': profile,
                         'region': region,
@@ -331,12 +328,12 @@ class S3ConnectionManager:
                         'last_used': timestamp()
                     }
                     self.save_cached_connections()
-                    print(f"{Fore.GREEN}✅ Connection '{name}' cached successfully{Style.RESET_ALL}")
+                    logger.success(f"Connection '{name}' cached successfully")
                 else:
-                    print(f"{Fore.YELLOW}Connection not cached (temporary use only){Style.RESET_ALL}")
+                    logger.warning_msg("Connection not cached (temporary use only)")
         else:
-            print(f"{Fore.RED}❌ Connection test failed. Please check your configuration and try again.{Style.RESET_ALL}")
-            if confirm("Retry connection setup?", default=True):
+            logger.failure("Connection test failed. Please check your configuration and try again.")
+            if logger.confirm("Retry connection setup?", default=True):
                 return self.get_connection_info()
             else:
                 return None
@@ -348,66 +345,66 @@ class S3ConnectionManager:
         while True:
             cached_connections = self.list_cached_connections()
             
-            print(f"\n{Fore.CYAN}=== S3 Connection Management ==={Style.RESET_ALL}")
+            logger.section("S3 Connection Management")
             
             if not cached_connections:
-                print(f"{Fore.YELLOW}No cached S3 connections available{Style.RESET_ALL}")
+                logger.warning_msg("No cached S3 connections available")
                 return
             
-            print(f"\n{Fore.CYAN}Cached S3 Connections:{Style.RESET_ALL}")
+            logger.subsection("Cached S3 Connections")
             for i, conn in enumerate(cached_connections, 1):
-                print(f"{Fore.YELLOW}{i:2d}.{Style.RESET_ALL} {conn.display}")
-                print(f"    Last used: {conn.last_used}")
+                logger.info(f"{i:2d}. {conn.display}")
+                logger.info(f"    Last used: {conn.last_used}")
             
-            print(f"\n{Fore.CYAN}Options:{Style.RESET_ALL}")
-            print("  Delete connection: del <number>")
-            print("  Test connection: test <number>")
-            print("  Clear all connections: clear")
-            print("  Return to main menu: quit")
+            logger.info("\nOptions:")
+            logger.info("  Delete connection: del <number>")
+            logger.info("  Test connection: test <number>")
+            logger.info("  Clear all connections: clear")
+            logger.info("  Return to main menu: quit")
             
             try:
-                action = input(f"\n{Fore.CYAN}Your choice: {Style.RESET_ALL}").strip().lower()
+                action = logger.get_input("Your choice").strip().lower()
                 
                 if action == 'quit' or action == 'q':
                     break
                 elif action == 'clear':
-                    if delete_confirm("ALL cached S3 connections", "connections", force_typing=True, confirmation_text="CLEAR"):
+                    if logger.delete_confirm("ALL cached S3 connections", "connections", force_typing=True, confirmation_text="CLEAR"):
                         self.connections_cache.clear()
                         self.save_cached_connections()
-                        print(f"{Fore.GREEN}✅ All S3 connections cleared{Style.RESET_ALL}")
+                        logger.success("All S3 connections cleared")
                 elif action.startswith('del '):
                     try:
                         conn_num = int(action.split()[1])
                         if 1 <= conn_num <= len(cached_connections):
                             conn_to_delete = cached_connections[conn_num - 1]
-                            if delete_confirm(conn_to_delete.name, "S3 connection"):
+                            if logger.delete_confirm(conn_to_delete.name, "S3 connection"):
                                 del self.connections_cache[conn_to_delete.name]
                                 self.save_cached_connections()
-                                print(f"{Fore.GREEN}✅ S3 connection '{conn_to_delete.name}' deleted{Style.RESET_ALL}")
+                                logger.success(f"S3 connection '{conn_to_delete.name}' deleted")
                         else:
-                            print(f"{Fore.RED}Invalid connection number{Style.RESET_ALL}")
+                            logger.failure("Invalid connection number")
                     except (ValueError, IndexError):
-                        print(f"{Fore.RED}Invalid command. Use: del <number>{Style.RESET_ALL}")
+                        logger.failure("Invalid command. Use: del <number>")
                 elif action.startswith('test '):
                     try:
                         conn_num = int(action.split()[1])
                         if 1 <= conn_num <= len(cached_connections):
                             conn_to_test = cached_connections[conn_num - 1]
                             
-                            print(f"{Fore.CYAN}Testing S3 connection '{conn_to_test.name}'...{Style.RESET_ALL}")
+                            logger.progress(f"Testing S3 connection '{conn_to_test.name}'...")
                             if self.test_connection(conn_to_test):
-                                print(f"{Fore.GREEN}✅ Connection test successful{Style.RESET_ALL}")
+                                logger.success("Connection test successful")
                             else:
-                                print(f"{Fore.RED}❌ Connection test failed{Style.RESET_ALL}")
+                                logger.failure("Connection test failed")
                         else:
-                            print(f"{Fore.RED}Invalid connection number{Style.RESET_ALL}")
+                            logger.failure("Invalid connection number")
                     except (ValueError, IndexError):
-                        print(f"{Fore.RED}Invalid command. Use: test <number>{Style.RESET_ALL}")
+                        logger.failure("Invalid command. Use: test <number>")
                 else:
-                    print(f"{Fore.RED}Invalid command. Type 'quit' to exit.{Style.RESET_ALL}")
+                    logger.failure("Invalid command. Type 'quit' to exit.")
                     
             except KeyboardInterrupt:
-                logger.info("Connection management cancelled by user")
+                logger.user_cancelled("connection management")
                 break
     
     def list_aws_profiles(self) -> List[str]:
@@ -450,7 +447,7 @@ class S3ConnectionManager:
     def test_connection(self, connection_info: S3ConnectionInfo) -> bool:
         """Test S3 connection"""
         try:
-            logger.info(f"Testing S3 connection: {connection_info.profile}@{connection_info.region}")
+            logger.progress(f"Testing S3 connection: {connection_info.profile}@{connection_info.region}")
             
             if connection_info.profile == 'default':
                 session = boto3.Session()
@@ -468,7 +465,7 @@ class S3ConnectionManager:
             response = s3_client.list_buckets()
             bucket_count = len(response.get('Buckets', []))
             
-            logger.info(f"✅ S3 connection successful - {bucket_count} buckets accessible")
+            logger.success(f"S3 connection successful - {bucket_count} buckets accessible")
             
             # Store session for later use
             self.session = session
@@ -476,7 +473,7 @@ class S3ConnectionManager:
             return True
             
         except Exception as e:
-            logger.error(f"❌ S3 connection failed: {e}")
+            logger.failure(f"S3 connection failed: {e}")
             return False
     
     def select_profile(self) -> Optional[str]:
@@ -484,45 +481,45 @@ class S3ConnectionManager:
         profiles = self.list_profiles()
         
         if not profiles:
-            logger.error("No AWS profiles found")
-            print(f"{Fore.RED}No AWS credentials found. Please configure AWS credentials first:{Style.RESET_ALL}")
-            print("  1. AWS CLI: aws configure")
-            print("  2. Environment variables: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY")
-            print("  3. IAM instance profile")
+            logger.failure("No AWS profiles found")
+            logger.info("No AWS credentials found. Please configure AWS credentials first:")
+            logger.info("  1. AWS CLI: aws configure")
+            logger.info("  2. Environment variables: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY")
+            logger.info("  3. IAM instance profile")
             return None
         
         if len(profiles) == 1:
             profile = profiles[0]
             if self.test_credentials(profile):
-                logger.info(f"Using AWS profile: {profile}")
+                logger.success(f"Using AWS profile: {profile}")
                 return profile
             else:
-                logger.error(f"AWS profile '{profile}' has invalid credentials")
+                logger.failure(f"AWS profile '{profile}' has invalid credentials")
                 return None
         
-        print(f"\n{Fore.CYAN}=== AWS Profile Selection ==={Style.RESET_ALL}")
+        logger.section("AWS Profile Selection")
         for i, profile in enumerate(profiles, 1):
             region = self.get_profile_region(profile)
-            print(f"{Fore.YELLOW}{i:2d}.{Style.RESET_ALL} {profile} {Fore.DIM}({region}){Style.RESET_ALL}")
+            logger.info(f"{i:2d}. {profile} ({region})")
         
         while True:
             try:
-                choice = get_input("Select AWS profile", default="1")
+                choice = logger.get_input("Select AWS profile", default="1")
                 index = int(choice) - 1
                 
                 if 0 <= index < len(profiles):
                     profile = profiles[index]
                     if self.test_credentials(profile):
-                        logger.info(f"Selected AWS profile: {profile}")
+                        logger.success(f"Selected AWS profile: {profile}")
                         return profile
                     else:
-                        logger.error(f"Profile '{profile}' has invalid credentials")
-                        if not confirm("Try another profile?", default=True):
+                        logger.failure(f"Profile '{profile}' has invalid credentials")
+                        if not logger.confirm("Try another profile?", default=True):
                             return None
                 else:
-                    print(f"{Fore.RED}Invalid selection. Choose 1-{len(profiles)}{Style.RESET_ALL}")
+                    logger.failure(f"Invalid selection. Choose 1-{len(profiles)}")
             except (ValueError, KeyboardInterrupt):
-                logger.info("Profile selection cancelled")
+                logger.user_cancelled("profile selection")
                 return None
     
     def get_profile_region(self, profile: str) -> str:
@@ -553,7 +550,7 @@ class S3ConnectionManager:
             return True
             
         except Exception as e:
-            logger.error(f"AWS credentials test failed: {e}")
+            logger.failure(f"AWS credentials test failed: {e}")
             return False
 
 
@@ -576,7 +573,6 @@ class S3SyncTool:
         self.verify_checksums = get_env_var('VERIFY_CHECKSUMS', True, bool)
         self.default_storage_class = get_env_var('DEFAULT_STORAGE_CLASS', 'STANDARD', str)
         self.encryption_enabled = get_env_var('ENCRYPTION_ENABLED', False, bool)
-        self.debug = get_env_var('DEBUG', False, bool)
         self.dry_run = get_env_var('DRY_RUN', False, bool)
         
         # Initialize components
@@ -586,9 +582,8 @@ class S3SyncTool:
         self.s3_client = None
         self.temp_dir = get_env_var('OPSKIT_TOOL_TEMP_DIR')
         
-        logger.info(f"🚀 Starting {self.tool_name}")
-        if self.debug:
-            logger.info(f"Debug mode enabled - region: {self.default_region}, parallel: {self.parallel_uploads}")
+        logger.operation_start(self.tool_name)
+        logger.debug(f"Configuration - region: {self.default_region}, parallel: {self.parallel_uploads}, multipart_threshold: {self.multipart_threshold}")
     
     def setup_aws_session(self) -> bool:
         """Setup AWS session and S3 client using connection manager"""
@@ -624,11 +619,11 @@ class S3SyncTool:
             self.transfer_config = transfer_config
             self.current_connection = connection_info
             
-            logger.info(f"✅ AWS session configured: {connection_info.display}")
+            logger.success(f"AWS session configured: {connection_info.display}")
             return True
             
         except Exception as e:
-            logger.error(f"Failed to setup AWS session: {e}")
+            logger.failure(f"Failed to setup AWS session: {e}")
             return False
     
     def list_s3_objects(self, bucket: str, prefix: str = '') -> List[FileInfo]:
@@ -905,16 +900,16 @@ class S3SyncTool:
         if not conflicts:
             return resolutions
         
-        print(f"\n{Fore.YELLOW}=== Conflict Resolution ==={Style.RESET_ALL}")
-        print(f"Found {len(conflicts)} files with conflicts")
+        logger.section("Conflict Resolution")
+        logger.info(f"Found {len(conflicts)} files with conflicts")
         
         for i, (local_file, s3_file, action) in enumerate(conflicts, 1):
-            print(f"\n{Fore.CYAN}Conflict {i}/{len(conflicts)}: {local_file.path}{Style.RESET_ALL}")
-            print(f"  Local:  {local_file.modified.strftime('%Y-%m-%d %H:%M:%S')} ({self.format_size(local_file.size)})")
-            print(f"  S3:     {s3_file.modified.strftime('%Y-%m-%d %H:%M:%S')} ({self.format_size(s3_file.size)})")
+            logger.subsection(f"Conflict {i}/{len(conflicts)}: {local_file.path}")
+            logger.info(f"  Local:  {local_file.modified.strftime('%Y-%m-%d %H:%M:%S')} ({self.format_size(local_file.size)})")
+            logger.info(f"  S3:     {s3_file.modified.strftime('%Y-%m-%d %H:%M:%S')} ({self.format_size(s3_file.size)})")
             
             while True:
-                choice = get_input(
+                choice = logger.get_input(
                     "Resolution: (l)ocal, (s)3, (r)ename local, (sk)ip",
                     validator=lambda x: x.lower() in ['l', 'local', 's', 's3', 'r', 'rename', 'sk', 'skip'],
                     error_message="Choose: l, s, r, or sk"
@@ -922,19 +917,19 @@ class S3SyncTool:
                 
                 if choice in ['l', 'local']:
                     resolutions[local_file.path] = 'upload'
-                    print(f"  {Fore.GREEN}→ Using local version{Style.RESET_ALL}")
+                    logger.success("Using local version")
                     break
                 elif choice in ['s', 's3']:
                     resolutions[local_file.path] = 'download'
-                    print(f"  {Fore.GREEN}→ Using S3 version{Style.RESET_ALL}")
+                    logger.success("Using S3 version")
                     break
                 elif choice in ['r', 'rename']:
                     resolutions[local_file.path] = 'rename'
-                    print(f"  {Fore.GREEN}→ Renaming local file{Style.RESET_ALL}")
+                    logger.success("Renaming local file")
                     break
                 elif choice in ['sk', 'skip']:
                     resolutions[local_file.path] = 'skip'
-                    print(f"  {Fore.YELLOW}→ Skipping file{Style.RESET_ALL}")
+                    logger.warning_msg("Skipping file")
                     break
         
         return resolutions
@@ -1022,7 +1017,7 @@ class S3SyncTool:
             # Show operation summary
             self.show_sync_summary(operations, bucket, prefix, local_dir)
             
-            if not self.dry_run and not confirm("Execute these operations?", default=True):
+            if not self.dry_run and not logger.confirm("Execute these operations?", default=True):
                 logger.info("Sync cancelled by user")
                 return False
             
@@ -1089,9 +1084,9 @@ class S3SyncTool:
     
     def show_sync_summary(self, operations: Dict, bucket: str, prefix: str, local_dir: str):
         """Show sync operation summary"""
-        print(f"\n{Fore.CYAN}=== Sync Summary ==={Style.RESET_ALL}")
-        print(f"Local:  {local_dir}")
-        print(f"S3:     s3://{bucket}/{prefix}")
+        logger.section("Sync Summary")
+        logger.info(f"Local:  {local_dir}")
+        logger.info(f"S3:     s3://{bucket}/{prefix}")
         
         upload_count = len(operations['upload'])
         download_count = len(operations['download'])
@@ -1099,63 +1094,63 @@ class S3SyncTool:
         conflict_count = len(operations['conflicts'])
         
         if upload_count > 0:
-            print(f"\n{Fore.GREEN}Will upload {upload_count} files:{Style.RESET_ALL}")
+            logger.subsection(f"Will upload {upload_count} files")
             for local_file, rel_path in operations['upload'][:5]:  # Show first 5
                 size_str = self.format_size(local_file.size)
-                print(f"  + {rel_path} ({size_str})")
+                logger.info(f"  + {rel_path} ({size_str})")
             if upload_count > 5:
-                print(f"  ... and {upload_count - 5} more files")
+                logger.info(f"  ... and {upload_count - 5} more files")
         
         if download_count > 0:
-            print(f"\n{Fore.BLUE}Will download {download_count} files:{Style.RESET_ALL}")
+            logger.subsection(f"Will download {download_count} files")
             for s3_file, rel_path in operations['download'][:5]:  # Show first 5
                 size_str = self.format_size(s3_file.size)
-                print(f"  - {rel_path} ({size_str})")
+                logger.info(f"  - {rel_path} ({size_str})")
             if download_count > 5:
-                print(f"  ... and {download_count - 5} more files")
+                logger.info(f"  ... and {download_count - 5} more files")
         
         if delete_count > 0:
-            print(f"\n{Fore.RED}Will delete {delete_count} items:{Style.RESET_ALL}")
+            logger.subsection(f"Will delete {delete_count} items")
             for location, rel_path in operations['delete'][:5]:  # Show first 5
                 prefix_char = "×" if location == "local" else "⊗"
-                print(f"  {prefix_char} {rel_path}")
+                logger.info(f"  {prefix_char} {rel_path}")
             if delete_count > 5:
-                print(f"  ... and {delete_count - 5} more items")
+                logger.info(f"  ... and {delete_count - 5} more items")
         
         if conflict_count > 0:
-            print(f"\n{Fore.YELLOW}Conflicts to resolve: {conflict_count}{Style.RESET_ALL}")
+            logger.warning_msg(f"Conflicts to resolve: {conflict_count}")
         
         total_ops = upload_count + download_count + delete_count
         if total_ops == 0:
-            print(f"\n{Fore.GREEN}✅ Everything is already in sync!{Style.RESET_ALL}")
+            logger.success("Everything is already in sync!")
     
     def show_sync_results(self):
         """Show sync operation results"""
         duration = self.stats.duration()
         
-        print(f"\n{Fore.CYAN}=== Sync Results ==={Style.RESET_ALL}")
-        print(f"Duration: {duration:.1f} seconds")
-        print(f"Total size: {self.format_size(self.stats.total_size)}")
+        logger.section("Sync Results")
+        logger.info(f"Duration: {duration:.1f} seconds")
+        logger.info(f"Total size: {self.format_size(self.stats.total_size)}")
         
         if self.stats.uploaded > 0:
-            print(f"✅ Uploaded: {self.stats.uploaded} files")
+            logger.success(f"Uploaded: {self.stats.uploaded} files")
         
         if self.stats.downloaded > 0:
-            print(f"✅ Downloaded: {self.stats.downloaded} files")
+            logger.success(f"Downloaded: {self.stats.downloaded} files")
         
         if self.stats.deleted > 0:
-            print(f"🗑️  Deleted: {self.stats.deleted} items")
+            logger.info(f"🗑️  Deleted: {self.stats.deleted} items")
         
         if self.stats.skipped > 0:
-            print(f"⏭️  Skipped: {self.stats.skipped} files")
+            logger.info(f"⏭️  Skipped: {self.stats.skipped} files")
         
         if self.stats.errors > 0:
-            print(f"❌ Errors: {self.stats.errors}")
+            logger.failure(f"Errors: {self.stats.errors}")
         
         # Calculate transfer rate
         if duration > 0 and self.stats.total_size > 0:
             rate = self.stats.total_size / duration
-            print(f"Transfer rate: {self.format_size(int(rate))}/s")
+            logger.info(f"Transfer rate: {self.format_size(int(rate))}/s")
     
     def format_size(self, size_bytes: int) -> str:
         """Format file size in human readable format"""
@@ -1167,8 +1162,8 @@ class S3SyncTool:
     
     def interactive_setup(self) -> Optional[Dict[str, str]]:
         """Interactive sync setup"""
-        print(f"\n{Fore.BLUE}{Style.BRIGHT}=== {self.tool_name} ==={Style.RESET_ALL}")
-        print(f"{Style.DIM}{self.description}{Style.RESET_ALL}\n")
+        logger.section(self.tool_name)
+        logger.info(self.description)
         
         # Get sync direction
         directions = {
@@ -1177,11 +1172,11 @@ class S3SyncTool:
             '3': ('bidirectional', 'Bidirectional sync')
         }
         
-        print(f"{Fore.CYAN}=== Sync Direction ==={Style.RESET_ALL}")
+        logger.subsection("Sync Direction")
         for key, (_, desc) in directions.items():
-            print(f"{key}. {desc}")
+            logger.info(f"{key}. {desc}")
         
-        direction_choice = get_input(
+        direction_choice = logger.get_input(
             "Select sync direction",
             default="1",
             validator=lambda x: x in directions,
@@ -1190,10 +1185,10 @@ class S3SyncTool:
         direction = directions[direction_choice][0]
         
         # Get local directory
-        local_dir = get_input(
+        local_dir = logger.get_input(
             "Local directory path",
             default=".",
-            validator=lambda x: Path(x).exists() or confirm(f"Create directory {x}?", default=True),
+            validator=lambda x: Path(x).exists() or logger.confirm(f"Create directory {x}?", default=True),
             error_message="Directory must exist or you must confirm creation"
         )
         
@@ -1201,16 +1196,16 @@ class S3SyncTool:
         local_path = Path(local_dir).resolve()
         if not local_path.exists():
             local_path.mkdir(parents=True, exist_ok=True)
-            print(f"{Fore.GREEN}Created directory: {local_path}{Style.RESET_ALL}")
+            logger.success(f"Created directory: {local_path}")
         
         # Get S3 bucket and prefix
-        bucket = get_input(
+        bucket = logger.get_input(
             "S3 bucket name",
             validator=lambda x: len(x) > 0 and x.replace('-', '').replace('.', '').isalnum(),
             error_message="Bucket name must be valid S3 bucket name"
         )
         
-        prefix = get_input(
+        prefix = logger.get_input(
             "S3 prefix (optional)",
             default="",
         ).strip('/')
@@ -1219,13 +1214,13 @@ class S3SyncTool:
             prefix = prefix + '/'
         
         # Configure options
-        print(f"\n{Fore.CYAN}=== Sync Options ==={Style.RESET_ALL}")
+        logger.subsection("Sync Options")
         
-        delete_removed = confirm("Delete files not present in source?", default=self.delete_removed)
-        dry_run = confirm("Dry run mode (preview only)?", default=self.dry_run)
+        delete_removed = logger.confirm("Delete files not present in source?", default=self.delete_removed)
+        dry_run = logger.confirm("Dry run mode (preview only)?", default=self.dry_run)
         
         # Set up exclusion patterns
-        exclusions = get_input(
+        exclusions = logger.get_input(
             "Additional exclusion patterns (comma-separated)",
             default=""
         )
@@ -1272,8 +1267,8 @@ class S3SyncTool:
                     self.show_help()
                     return
                 else:
-                    print(f"{Fore.RED}Unknown command: {command}{Style.RESET_ALL}")
-                    print(f"{Fore.CYAN}Available commands: help{Style.RESET_ALL}")
+                    logger.failure(f"Unknown command: {command}")
+                    logger.info("Available commands: help")
                     return
             
             # Interactive setup
@@ -1308,39 +1303,39 @@ class S3SyncTool:
     
     def show_help(self):
         """Display help information"""
-        print(f"\n{Fore.CYAN}=== S3 Sync Tool Help ==={Style.RESET_ALL}")
+        logger.section("S3 Sync Tool Help")
         
-        print(f"\n{Fore.YELLOW}Commands:{Style.RESET_ALL}")
-        print(f"  help                                 # Show this help")
+        logger.subsection("Commands")
+        logger.info("  help                                 # Show this help")
         
-        print(f"\n{Fore.YELLOW}Sync Directions:{Style.RESET_ALL}")
-        print(f"  • Upload: Sync local files to S3")
-        print(f"  • Download: Sync S3 objects to local")
-        print(f"  • Bidirectional: Two-way sync with conflict resolution")
+        logger.subsection("Sync Directions")
+        logger.info("  • Upload: Sync local files to S3")
+        logger.info("  • Download: Sync S3 objects to local")
+        logger.info("  • Bidirectional: Two-way sync with conflict resolution")
         
-        print(f"\n{Fore.YELLOW}AWS Credentials:{Style.RESET_ALL}")
-        print(f"  • Environment variables: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY")
-        print(f"  • AWS credentials file: ~/.aws/credentials")
-        print(f"  • IAM instance profile (for EC2)")
-        print(f"  • AWS CLI: aws configure")
+        logger.subsection("AWS Credentials")
+        logger.info("  • Environment variables: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY")
+        logger.info("  • AWS credentials file: ~/.aws/credentials")
+        logger.info("  • IAM instance profile (for EC2)")
+        logger.info("  • AWS CLI: aws configure")
         
-        print(f"\n{Fore.YELLOW}Features:{Style.RESET_ALL}")
-        print(f"  • Intelligent file comparison (size, timestamp, checksum)")
-        print(f"  • Multipart uploads for large files")
-        print(f"  • Progress tracking and resume capability")
-        print(f"  • Exclusion patterns (.gitignore style)")
-        print(f"  • Dry run mode for preview")
-        print(f"  • Interactive conflict resolution")
+        logger.subsection("Features")
+        logger.info("  • Intelligent file comparison (size, timestamp, checksum)")
+        logger.info("  • Multipart uploads for large files")
+        logger.info("  • Progress tracking and resume capability")
+        logger.info("  • Exclusion patterns (.gitignore style)")
+        logger.info("  • Dry run mode for preview")
+        logger.info("  • Interactive conflict resolution")
         
-        print(f"\n{Fore.YELLOW}Environment Variables:{Style.RESET_ALL}")
-        print(f"  AWS_DEFAULT_REGION=us-east-1        # Default AWS region")
-        print(f"  PARALLEL_UPLOADS=4                  # Concurrent uploads")
-        print(f"  DELETE_REMOVED=false                # Delete files not in source")
-        print(f"  VERIFY_CHECKSUMS=true               # Enable ETag verification")
-        print(f"  DEFAULT_STORAGE_CLASS=STANDARD      # S3 storage class")
-        print(f"  ENCRYPTION_ENABLED=false            # Enable server-side encryption")
-        print(f"  DRY_RUN=false                       # Enable dry run mode by default")
-        print(f"  DEBUG=false                         # Enable debug logging")
+        logger.subsection("Environment Variables")
+        logger.info("  AWS_DEFAULT_REGION=us-east-1        # Default AWS region")
+        logger.info("  PARALLEL_UPLOADS=4                  # Concurrent uploads")
+        logger.info("  DELETE_REMOVED=false                # Delete files not in source")
+        logger.info("  VERIFY_CHECKSUMS=true               # Enable ETag verification")
+        logger.info("  DEFAULT_STORAGE_CLASS=STANDARD      # S3 storage class")
+        logger.info("  ENCRYPTION_ENABLED=false            # Enable server-side encryption")
+        logger.info("  DRY_RUN=false                       # Enable dry run mode by default")
+        logger.info("  DEBUG=false                         # Enable debug logging")
 
 
 @click.command()

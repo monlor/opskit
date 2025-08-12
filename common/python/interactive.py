@@ -1,555 +1,480 @@
 """
-Interactive Components Library - Python Implementation
+Interactive Components Library - Enhanced Logger with Interactive Components
 
-Provides common interactive UI components for OpsKit tools:
-- User input with validation
-- Confirmation dialogs  
-- Selection lists
-- Advanced selection with prompt_toolkit
-- Delete confirmations
-- Progress indicators
+Provides enhanced logging functionality with interactive UI components for OpsKit tools:
+- Enhanced logger with semantic logging methods  
+- Interactive components integration (confirm, input, selection)
+- Formatting helpers and structured display
+- Connection and operation logging
 """
 
 import os
 import sys
 import getpass
-from typing import List, Dict, Any, Optional, Callable, Union
-from datetime import datetime
+import time
+import threading
+from typing import List, Dict, Any, Optional, Callable
 
-# Third-party imports (optional dependencies)
-try:
-    from prompt_toolkit import prompt
-    from prompt_toolkit.completion import WordCompleter
-    from prompt_toolkit.shortcuts import radiolist_dialog, button_dialog
-    from prompt_toolkit.shortcuts import confirm
-    from prompt_toolkit.formatted_text import HTML
-    from prompt_toolkit.styles import Style
-    PROMPT_TOOLKIT_AVAILABLE = True
-except ImportError:
-    PROMPT_TOOLKIT_AVAILABLE = False
+# Import OpsKit logger
+sys.path.insert(0, os.environ['OPSKIT_BASE_PATH'])
+from common.python.logger import get_logger
 
 try:
-    from colorama import init, Fore, Style as ColoramaStyle, Back
-    init(autoreset=True)
-    COLORAMA_AVAILABLE = True
+    import colorama
+    from colorama import Fore, Style
+    colorama.init(autoreset=True)
+    colorama_available = True
 except ImportError:
-    COLORAMA_AVAILABLE = False
-    # Fallback empty strings if colorama not available
-    class _MockFore:
-        RED = GREEN = YELLOW = BLUE = CYAN = MAGENTA = WHITE = ""
-    class _MockStyle:
-        RESET_ALL = BRIGHT = DIM = ""
-    class _MockBack:
-        RED = GREEN = YELLOW = BLUE = CYAN = MAGENTA = WHITE = ""
-    Fore = _MockFore()
-    ColoramaStyle = _MockStyle()
-    Back = _MockBack()
+    colorama_available = False
 
 
-class InteractiveComponents:
-    """Collection of interactive UI components for terminal applications"""
+class LoadingSpinner:
+    """Loading spinner for long-running operations"""
     
-    def __init__(self, use_colors: bool = True):
-        """
-        Initialize interactive components
-        
-        Args:
-            use_colors: Enable colored output (requires colorama)
-        """
-        self.use_colors = use_colors and COLORAMA_AVAILABLE
+    def __init__(self, message: str = "Loading", spinner_chars: str = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏", logger=None):
+        self.message = message
+        self.spinner_chars = spinner_chars
+        self.running = False
+        self.thread = None
+        self.start_time = None
+        self.logger = logger or get_logger("interactive")
     
-    def get_user_input(self, 
-                      prompt_text: str, 
-                      default: Optional[str] = None,
-                      validator: Optional[Callable[[str], bool]] = None,
-                      error_message: str = "Invalid input, please try again",
-                      required: bool = True,
-                      password: bool = False,
-                      completions: Optional[List[str]] = None) -> str:
-        """
-        Get user input with validation and optional features
+    def start(self):
+        """Start the loading spinner"""
+        if self.running:
+            return
         
-        Args:
-            prompt_text: Text to display as prompt
-            default: Default value if user enters nothing
-            validator: Function to validate input (returns bool)
-            error_message: Message to show on validation failure
-            required: Whether input is required
-            password: Hide input (for passwords)
-            completions: List of auto-completion options
-            
-        Returns:
-            User input string
-        """
-        # Format prompt
-        if default:
-            display_prompt = f"{prompt_text} [{default}]: "
+        self.running = True
+        self.start_time = time.time()
+        self.thread = threading.Thread(target=self._spin)
+        self.thread.daemon = True
+        self.thread.start()
+    
+    def stop(self, final_message: str = None):
+        """Stop the loading spinner"""
+        if not self.running:
+            return
+        
+        self.running = False
+        if self.thread:
+            self.thread.join()
+        
+        # Clear the spinner line
+        sys.stdout.write('\r\033[K')
+        
+        # Show final message with duration if provided
+        if final_message:
+            duration = time.time() - self.start_time if self.start_time else 0
+            self.logger.info(f"{final_message} ({duration:.1f}s)")
+        
+        sys.stdout.flush()
+    
+    def _spin(self):
+        """Internal spinner animation"""
+        i = 0
+        while self.running:
+            duration = time.time() - self.start_time if self.start_time else 0
+            char = self.spinner_chars[i % len(self.spinner_chars)]
+            sys.stdout.write(f'\r{char} {self.message}... ({duration:.1f}s)')
+            sys.stdout.flush()
+            time.sleep(0.1)
+            i += 1
+    
+    def __enter__(self):
+        """Context manager entry"""
+        self.start()
+        return self
+    
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Context manager exit"""
+        if exc_type is None:
+            self.stop("✅ Completed")
         else:
-            display_prompt = f"{prompt_text}: "
-        
-        if self.use_colors:
-            display_prompt = f"{Fore.CYAN}{display_prompt}{ColoramaStyle.RESET_ALL}"
-        
-        while True:
-            try:
-                if password:
-                    user_input = getpass.getpass(display_prompt)
-                # Force simple input for better OpsKit compatibility
-                # elif PROMPT_TOOLKIT_AVAILABLE and completions:
-                #     completer = WordCompleter(completions)
-                #     user_input = prompt(display_prompt, completer=completer)
-                else:
-                    user_input = input(display_prompt)
-                
-                # Handle empty input
-                if not user_input.strip():
-                    if default:
-                        return default
-                    elif not required:
-                        return ""
-                    else:
-                        if self.use_colors:
-                            print(f"{Fore.RED}Input is required{ColoramaStyle.RESET_ALL}")
-                        else:
-                            print("Input is required")
-                        continue
-                
-                # Validate input
-                if validator and not validator(user_input.strip()):
-                    if self.use_colors:
-                        print(f"{Fore.RED}{error_message}{ColoramaStyle.RESET_ALL}")
-                    else:
-                        print(error_message)
-                    continue
-                
-                return user_input.strip()
-                
-            except KeyboardInterrupt:
-                print("\nOperation cancelled by user")
-                sys.exit(1)
-            except EOFError:
-                print("\nEOF received, exiting")
-                sys.exit(1)
+            self.stop("❌ Failed")
+
+
+class ProgressTracker:
+    """Progress tracker for operations with known steps"""
     
-    def confirm(self, 
-                message: str, 
-                default: bool = False,
-                yes_text: str = "yes",
-                no_text: str = "no") -> bool:
-        """
-        Show confirmation dialog
+    def __init__(self, total_steps: int, operation_name: str = "Operation", logger=None):
+        self.total_steps = total_steps
+        self.operation_name = operation_name
+        self.current_step = 0
+        self.start_time = time.time()
+        self.logger = logger or get_logger("interactive")
+    
+    def update(self, step_description: str = None):
+        """Update progress to next step"""
+        self.current_step += 1
+        progress_pct = (self.current_step / self.total_steps) * 100
         
-        Args:
-            message: Confirmation message
-            default: Default choice (True for yes, False for no)
-            yes_text: Text for yes option
-            no_text: Text for no option
-            
-        Returns:
-            True if confirmed, False otherwise
-        """
-        # Force simple input for better compatibility with OpsKit subprocess handling
-        # prompt_toolkit can cause issues when tools are run through subprocess
+        # Create progress bar
+        bar_width = 30
+        filled_width = int(bar_width * self.current_step / self.total_steps)
+        bar = "█" * filled_width + "░" * (bar_width - filled_width)
         
-        # Fallback to simple input
+        # Calculate elapsed and estimated time
+        elapsed = time.time() - self.start_time
+        if self.current_step > 0:
+            estimated_total = elapsed * self.total_steps / self.current_step
+            remaining = estimated_total - elapsed
+        else:
+            remaining = 0
+        
+        # Format message
+        message = f"[{self.current_step}/{self.total_steps}] {bar} {progress_pct:.0f}%"
+        if step_description:
+            message += f" - {step_description}"
+        if remaining > 0:
+            message += f" (ETA: {remaining:.0f}s)"
+        
+        self.logger.info(f"\r{message}")
+        
+        if self.current_step >= self.total_steps:
+            self.logger.info(f"✅ {self.operation_name} completed in {elapsed:.1f}s")
+    
+    def finish(self, message: str = None):
+        """Mark operation as finished"""
+        elapsed = time.time() - self.start_time
+        if message:
+            self.logger.info(f"✅ {message} ({elapsed:.1f}s)")
+        else:
+            self.logger.info(f"✅ {self.operation_name} completed in {elapsed:.1f}s")
+
+
+class Interactive:
+    """Enhanced logger with interactive components and formatting helpers"""
+    
+    def __init__(self, name: str, tool_name: Optional[str] = None):
+        self.logger = get_logger(name, tool_name)
+        
+        # Import colors
+        try:
+            from colorama import Fore, Style
+            self.Fore = Fore
+            self.Style = Style
+            self.colors_available = True
+        except ImportError:
+            self.colors_available = False
+    
+    def info(self, message: str, *args, **kwargs):
+        """Info level logging"""
+        self.logger.info(message, *args, **kwargs)
+    
+    def debug(self, message: str, *args, **kwargs):
+        """Debug level logging"""
+        self.logger.debug(message, *args, **kwargs)
+    
+    def warning(self, message: str, *args, **kwargs):
+        """Warning level logging"""
+        self.logger.warning(message, *args, **kwargs)
+    
+    def error(self, message: str, *args, **kwargs):
+        """Error level logging"""
+        self.logger.error(message, *args, **kwargs)
+    
+    def critical(self, message: str, *args, **kwargs):
+        """Critical level logging"""
+        self.logger.critical(message, *args, **kwargs)
+    
+    def section(self, title: str, width: int = 80):
+        """Log a section header"""
+        separator = "=" * width
+        self.info(f"\n{separator}")
+        self.info(f"🔄 {title}")
+        self.info(separator)
+    
+    def subsection(self, title: str, width: int = 60):
+        """Log a subsection header"""
+        separator = "-" * width
+        self.info(f"\n{separator}")
+        self.info(f"📋 {title}")
+        self.info(separator)
+    
+    def step(self, step_num: int, total_steps: int, description: str):
+        """Log a step in a process"""
+        self.info(f"[{step_num}/{total_steps}] 🔄 {description}")
+    
+    def success(self, message: str):
+        """Log a success message with emoji"""
+        self.info(f"✅ {message}")
+    
+    def failure(self, message: str):
+        """Log a failure message with emoji"""
+        self.error(f"❌ {message}")
+    
+    def warning_msg(self, message: str):
+        """Log a warning message with emoji"""
+        self.warning(f"⚠️  {message}")
+    
+    def progress(self, message: str):
+        """Log a progress message with emoji"""
+        self.info(f"📊 {message}")
+    
+    def connection_test(self, host: str, port: str, result: bool):
+        """Log connection test results"""
+        if result:
+            self.success(f"Connection to {host}:{port} successful")
+        else:
+            self.failure(f"Connection to {host}:{port} failed")
+    
+    def operation_start(self, operation: str, details: str = ""):
+        """Log operation start"""
+        if details:
+            self.info(f"🚀 Starting {operation}: {details}")
+        else:
+            self.info(f"🚀 Starting {operation}")
+    
+    def operation_complete(self, operation: str, duration: float = None):
+        """Log operation completion"""
+        if duration is not None:
+            self.success(f"{operation} completed (duration: {duration:.1f}s)")
+        else:
+            self.success(f"{operation} completed")
+    
+    def display_info(self, title: str, info_dict: Dict[str, Any]):
+        """Display structured information"""
+        self.info(f"\n📋 {title}:")
+        for key, value in info_dict.items():
+            self.info(f"   {key}: {value}")
+    
+    def display_list(self, title: str, items: List[str], indent: str = "  • "):
+        """Display a list with proper formatting"""
+        self.info(f"\n📊 {title} ({len(items)} items):")
+        for item in items:
+            self.info(f"{indent}{item}")
+    
+    def confirmation_required(self, message: str):
+        """Log that confirmation is required"""
+        self.warning_msg(f"Confirmation required: {message}")
+    
+    def user_cancelled(self, operation: str = "operation"):
+        """Log user cancellation"""
+        self.info(f"👋 User cancelled {operation}")
+    
+    def retry_attempt(self, attempt: int, max_attempts: int, operation: str):
+        """Log retry attempts"""
+        self.warning_msg(f"Retry attempt {attempt}/{max_attempts} for {operation}")
+    
+    def cache_operation(self, operation: str, item: str):
+        """Log cache operations"""
+        self.debug(f"Cache {operation}: {item}")
+    
+    # Interactive component methods
+    def confirm(self, message: str, default: bool = False, **kwargs) -> bool:
+        """Interactive confirmation with logging"""
+        self.confirmation_required(message)
+        
+        # Simple confirmation implementation
         default_char = 'Y' if default else 'N'
         other_char = 'n' if default else 'y'
-        
-        if self.use_colors:
-            prompt_text = f"{Fore.CYAN}{message} [{default_char}/{other_char}]: {ColoramaStyle.RESET_ALL}"
-        else:
-            prompt_text = f"{message} [{default_char}/{other_char}]: "
+        prompt_text = f"{message} [{default_char}/{other_char}]: "
         
         while True:
             try:
                 response = input(prompt_text).strip().lower()
                 
                 if not response:
-                    return default
-                
-                if response in ['y', 'yes', 'true', '1']:
-                    return True
+                    result = default
+                elif response in ['y', 'yes', 'true', '1']:
+                    result = True
                 elif response in ['n', 'no', 'false', '0']:
-                    return False
+                    result = False
                 else:
-                    if self.use_colors:
-                        print(f"{Fore.RED}Please enter {yes_text} or {no_text}{ColoramaStyle.RESET_ALL}")
-                    else:
-                        print(f"Please enter {yes_text} or {no_text}")
-                    
+                    self.logger.warning("Please enter yes or no")
+                    continue
+                
+                if result:
+                    self.info(f"✅ User confirmed: {message}")
+                else:
+                    self.info(f"❌ User declined: {message}")
+                
+                return result
+                
             except KeyboardInterrupt:
-                print("\nOperation cancelled by user")
+                self.user_cancelled("confirmation")
                 return False
     
-    def select_from_list(self, 
-                        items: List[Union[str, Dict[str, Any]]], 
-                        title: str = "Select an option",
-                        allow_multiple: bool = False,
-                        numbered: bool = True,
-                        allow_cancel: bool = True) -> Union[int, List[int], None]:
-        """
-        Display a selection list and get user choice
+    def get_input(self, prompt: str, default: str = "", password: bool = False, 
+                  validator=None, error_message: str = "Invalid input", **kwargs) -> str:
+        """Interactive input with logging"""
+        self.debug(f"Requesting input: {prompt}")
         
-        Args:
-            items: List of items (strings or dicts with 'name' and 'value')
-            title: Title for the selection
-            allow_multiple: Allow multiple selections
-            numbered: Show numbers for selection
-            allow_cancel: Allow cancellation
-            
-        Returns:
-            Selected index(es) or None if cancelled
-        """
-        if not items:
-            if self.use_colors:
-                print(f"{Fore.YELLOW}No items to select from{ColoramaStyle.RESET_ALL}")
-            else:
-                print("No items to select from")
-            return None
-        
-        # Display title
-        if self.use_colors:
-            print(f"\n{Fore.CYAN}=== {title} ==={ColoramaStyle.RESET_ALL}")
+        # Format prompt
+        if default:
+            display_prompt = f"{prompt} [{default}]: "
         else:
-            print(f"\n=== {title} ===")
-        
-        # Display items
-        for i, item in enumerate(items, 1):
-            if isinstance(item, dict):
-                display_text = item.get('name', str(item))
-            else:
-                display_text = str(item)
-            
-            if numbered:
-                if self.use_colors:
-                    print(f"{Fore.YELLOW}{i:2d}.{ColoramaStyle.RESET_ALL} {display_text}")
-                else:
-                    print(f"{i:2d}. {display_text}")
-            else:
-                print(f"  {display_text}")
-        
-        # Show selection options
-        if allow_multiple:
-            selection_help = "Enter numbers separated by commas (e.g., 1,3,5)"
-        else:
-            selection_help = "Enter the number of your choice"
-        
-        if allow_cancel:
-            selection_help += ", or 'cancel' to abort"
-        
-        if self.use_colors:
-            print(f"\n{Fore.CYAN}{selection_help}{ColoramaStyle.RESET_ALL}")
-        else:
-            print(f"\n{selection_help}")
+            display_prompt = f"{prompt}: "
         
         while True:
             try:
-                response = input(f"Your choice: ").strip().lower()
-                
-                if allow_cancel and response in ['cancel', 'c', 'quit', 'q']:
-                    return None
-                
-                if allow_multiple:
-                    try:
-                        # Parse multiple selections
-                        selections = []
-                        for part in response.split(','):
-                            part = part.strip()
-                            if '-' in part:
-                                # Handle ranges like "1-5"
-                                start, end = map(int, part.split('-'))
-                                selections.extend(range(start, end + 1))
-                            else:
-                                selections.append(int(part))
-                        
-                        # Validate selections
-                        valid_selections = []
-                        for sel in selections:
-                            if 1 <= sel <= len(items):
-                                if sel - 1 not in valid_selections:
-                                    valid_selections.append(sel - 1)
-                        
-                        if valid_selections:
-                            return sorted(valid_selections)
-                        else:
-                            raise ValueError("No valid selections")
-                            
-                    except ValueError:
-                        if self.use_colors:
-                            print(f"{Fore.RED}Invalid selection format{ColoramaStyle.RESET_ALL}")
-                        else:
-                            print("Invalid selection format")
-                        continue
+                if password:
+                    user_input = getpass.getpass(display_prompt)
                 else:
-                    try:
-                        selection = int(response)
-                        if 1 <= selection <= len(items):
-                            return selection - 1
-                        else:
-                            raise ValueError("Selection out of range")
-                    except ValueError:
-                        if self.use_colors:
-                            print(f"{Fore.RED}Please enter a number between 1 and {len(items)}{ColoramaStyle.RESET_ALL}")
-                        else:
-                            print(f"Please enter a number between 1 and {len(items)}")
+                    user_input = input(display_prompt)
+                
+                # Handle empty input
+                if not user_input.strip():
+                    if default:
+                        user_input = default
+                    else:
+                        self.logger.warning("Input is required")
                         continue
-                        
+                
+                # Validate input
+                if validator and not validator(user_input.strip()):
+                    self.logger.warning(error_message)
+                    continue
+                
+                self.debug(f"User input received for: {prompt}")
+                return user_input.strip()
+                
             except KeyboardInterrupt:
-                print("\nSelection cancelled by user")
-                return None
+                self.user_cancelled("input")
+                return ""
+            except EOFError:
+                return ""
     
-    def advanced_select(self, 
-                       items: List[Dict[str, Any]], 
-                       title: str = "Select an option",
-                       text_key: str = 'name',
-                       value_key: str = 'value') -> Any:
-        """
-        Advanced selection using prompt_toolkit (if available)
+    def delete_confirm(self, item_name: str, item_type: str = "item", 
+                      force_typing: bool = False, confirmation_text: str = "DELETE", **kwargs) -> bool:
+        """Interactive delete confirmation with logging"""
+        self.warning_msg(f"Delete confirmation requested for: {item_name}")
         
-        Args:
-            items: List of dictionaries with text and value
-            title: Dialog title
-            text_key: Key for display text in item dict
-            value_key: Key for return value in item dict
-            
-        Returns:
-            Selected value or None if cancelled
-        """
-        if not PROMPT_TOOLKIT_AVAILABLE:
-            # Fallback to simple selection
-            result_idx = self.select_from_list(items, title, allow_cancel=True)
-            if result_idx is not None:
-                return items[result_idx].get(value_key)
-            return None
-        
-        try:
-            # Convert items to prompt_toolkit format
-            radio_items = []
-            for item in items:
-                radio_items.append((
-                    item.get(value_key),
-                    item.get(text_key, str(item))
-                ))
-            
-            result = radiolist_dialog(
-                title=title,
-                text="Use arrow keys to navigate and Space to select:",
-                values=radio_items,
-                style=Style.from_dict({
-                    'dialog': 'bg:#88ff88',
-                    'button': 'bg:#ffffff #000000',
-                    'radio-selected': 'bg:#0000aa #ffffff',
-                    'radio': '#ffffff',
-                })
-            ).run()
-            
-            return result
-            
-        except KeyboardInterrupt:
-            return None
-        except Exception:
-            # Fallback to simple selection on any error
-            result_idx = self.select_from_list(items, title, allow_cancel=True)
-            if result_idx is not None:
-                return items[result_idx].get(value_key)
-            return None
-    
-    def delete_confirmation(self, 
-                           item_name: str, 
-                           item_type: str = "item",
-                           force_typing: bool = False,
-                           confirmation_text: str = "DELETE") -> bool:
-        """
-        Specialized confirmation for delete operations
-        
-        Args:
-            item_name: Name of item being deleted
-            item_type: Type of item (file, database, etc.)
-            force_typing: Require typing confirmation text
-            confirmation_text: Text user must type to confirm
-            
-        Returns:
-            True if deletion confirmed
-        """
-        if self.use_colors:
-            print(f"\n{Fore.RED}⚠️  WARNING: Destructive Operation{ColoramaStyle.RESET_ALL}")
-            print(f"You are about to delete {item_type}: {Fore.YELLOW}{item_name}{ColoramaStyle.RESET_ALL}")
-            print(f"{Fore.RED}This action cannot be undone!{ColoramaStyle.RESET_ALL}")
-        else:
-            print(f"\n⚠️  WARNING: Destructive Operation")
-            print(f"You are about to delete {item_type}: {item_name}")
-            print("This action cannot be undone!")
+        self.logger.warning(f"⚠️  WARNING: Destructive Operation")
+        self.logger.warning(f"You are about to delete {item_type}: {item_name}")
+        self.logger.warning("This action cannot be undone!")
         
         if force_typing:
-            typed_confirmation = self.get_user_input(
+            typed_confirmation = self.get_input(
                 f"Type '{confirmation_text}' to confirm deletion",
                 validator=lambda x: x.upper() == confirmation_text.upper(),
                 error_message=f"You must type '{confirmation_text}' exactly to confirm"
             )
-            return typed_confirmation.upper() == confirmation_text.upper()
+            result = typed_confirmation.upper() == confirmation_text.upper()
         else:
-            return self.confirm(f"Delete {item_type} '{item_name}'?", default=False)
+            result = self.confirm(f"Delete {item_type} '{item_name}'?", default=False)
+        
+        if result:
+            self.warning_msg(f"Delete confirmed for: {item_name}")
+        else:
+            self.info(f"Delete cancelled for: {item_name}")
+        
+        return result
     
-    def show_progress_bar(self, 
-                         current: int, 
-                         total: int, 
-                         prefix: str = "Progress",
-                         suffix: str = "Complete",
-                         length: int = 50,
-                         fill: str = '█',
-                         empty: str = '-') -> None:
-        """
-        Display a progress bar
+    def select_from_list(self, items: List, title: str = "Select an option", **kwargs):
+        """Interactive list selection with logging"""
+        self.info(f"List selection requested: {title} ({len(items)} items)")
         
-        Args:
-            current: Current progress value
-            total: Total value for completion
-            prefix: Text before progress bar
-            suffix: Text after progress bar  
-            length: Length of progress bar in characters
-            fill: Character for filled portion
-            empty: Character for empty portion
-        """
-        if total == 0:
-            return
-            
-        percent = min(100.0 * current / total, 100.0)
-        filled_length = int(length * current // total)
+        if not items:
+            self.logger.warning("No items to select from")
+            return None
         
-        if self.use_colors:
-            bar = f"{Fore.GREEN}{fill * filled_length}{ColoramaStyle.RESET_ALL}"
-            bar += f"{Fore.WHITE}{empty * (length - filled_length)}{ColoramaStyle.RESET_ALL}"
-            print(f"\r{prefix} |{bar}| {percent:6.1f}% {suffix}", end="", flush=True)
-        else:
-            bar = fill * filled_length + empty * (length - filled_length)
-            print(f"\r{prefix} |{bar}| {percent:6.1f}% {suffix}", end="", flush=True)
+        self.logger.info(f"=== {title} ===")
+        for i, item in enumerate(items, 1):
+            self.logger.info(f"{i:2d}. {item}")
+        
+        while True:
+            try:
+                response = input("Your choice: ").strip()
+                
+                if not response:
+                    self.info(f"User cancelled selection from: {title}")
+                    return None
+                
+                try:
+                    selection = int(response)
+                    if 1 <= selection <= len(items):
+                        result = selection - 1
+                        self.info(f"User selected option {result} from: {title}")
+                        return result
+                    else:
+                        self.logger.warning(f"Please enter a number between 1 and {len(items)}")
+                except ValueError:
+                    self.logger.warning("Please enter a valid number")
+                    
+            except KeyboardInterrupt:
+                self.info(f"User cancelled selection from: {title}")
+                return None
     
-    def show_spinner(self, message: str = "Processing", delay: float = 0.1) -> None:
-        """
-        Show a simple spinner (for use in loops)
-        Call repeatedly to animate
-        
-        Args:
-            message: Message to show with spinner
-            delay: Animation delay between calls
-        """
-        import time
-        
-        spinner_chars = ['|', '/', '-', '\\']
-        char_index = int(time.time() / delay) % len(spinner_chars)
-        
-        if self.use_colors:
-            print(f"\r{Fore.CYAN}{spinner_chars[char_index]}{ColoramaStyle.RESET_ALL} {message}", end="", flush=True)
-        else:
-            print(f"\r{spinner_chars[char_index]} {message}", end="", flush=True)
+    # Loading and progress methods
+    def loading_spinner(self, message: str = "Processing") -> LoadingSpinner:
+        """Create a loading spinner for long-running operations"""
+        self.debug(f"Starting loading spinner: {message}")
+        return LoadingSpinner(message, logger=self.logger)
     
-    def display_table(self, 
-                     data: List[Dict[str, Any]], 
-                     headers: Optional[List[str]] = None,
-                     title: Optional[str] = None) -> None:
-        """
-        Display data in a simple table format
-        
-        Args:
-            data: List of dictionaries with table data
-            headers: Column headers (auto-detected if None)
-            title: Optional table title
-        """
-        if not data:
-            if self.use_colors:
-                print(f"{Fore.YELLOW}No data to display{ColoramaStyle.RESET_ALL}")
-            else:
-                print("No data to display")
-            return
-        
-        # Auto-detect headers if not provided
-        if headers is None:
-            headers = list(data[0].keys()) if data else []
-        
-        # Calculate column widths
-        col_widths = {}
-        for header in headers:
-            col_widths[header] = len(str(header))
-            for row in data:
-                col_widths[header] = max(col_widths[header], len(str(row.get(header, ''))))
-        
-        # Display title
-        if title:
-            if self.use_colors:
-                print(f"\n{Fore.CYAN}=== {title} ==={ColoramaStyle.RESET_ALL}")
-            else:
-                print(f"\n=== {title} ===")
-        
-        # Display headers
-        header_line = " | ".join(header.ljust(col_widths[header]) for header in headers)
-        separator_line = "-" * len(header_line)
-        
-        if self.use_colors:
-            print(f"{Fore.YELLOW}{header_line}{ColoramaStyle.RESET_ALL}")
-        else:
-            print(header_line)
-        print(separator_line)
-        
-        # Display data rows
-        for row in data:
-            row_line = " | ".join(str(row.get(header, '')).ljust(col_widths[header]) for header in headers)
-            print(row_line)
+    def progress_tracker(self, total_steps: int, operation_name: str = "Operation") -> ProgressTracker:
+        """Create a progress tracker for operations with known steps"""
+        self.debug(f"Starting progress tracker: {operation_name} ({total_steps} steps)")
+        return ProgressTracker(total_steps, operation_name, logger=self.logger)
+    
+    def with_loading(self, operation: Callable, message: str = "Processing", *args, **kwargs):
+        """Execute an operation with a loading spinner"""
+        with self.loading_spinner(message) as spinner:
+            try:
+                result = operation(*args, **kwargs)
+                spinner.stop("✅ Completed")
+                return result
+            except Exception as e:
+                spinner.stop(f"❌ Failed: {e}")
+                raise
 
 
-# Global instance for easy access
-interactive = InteractiveComponents()
+def get_interactive(name: str, tool_name: Optional[str] = None) -> Interactive:
+    """
+    Get an interactive logger with components and formatting helpers
+    
+    Args:
+        name: Logger name (usually __name__)
+        tool_name: Optional tool name for tool-specific logging
+    
+    Returns:
+        Interactive logger instance with additional methods
+    
+    Example:
+        logger = get_interactive(__name__, 'mysql-sync')
+        logger.section("Database Synchronization")
+        logger.success("Operation completed successfully")
+        result = logger.confirm("Continue with operation?")
+    """
+    return Interactive(name, tool_name)
 
-# Convenience functions for common use cases
-def get_input(prompt_text: str, **kwargs) -> str:
-    """Convenience function for getting user input"""
-    return interactive.get_user_input(prompt_text, **kwargs)
 
+# Convenience functions for backward compatibility
 def confirm(message: str, **kwargs) -> bool:
-    """Convenience function for confirmation"""
-    return interactive.confirm(message, **kwargs)
+    """Interactive confirmation"""
+    temp_logger = Interactive("interactive")
+    return temp_logger.confirm(message, **kwargs)
 
-def select_from_list(items: List, **kwargs) -> Union[int, List[int], None]:
-    """Convenience function for list selection"""
-    return interactive.select_from_list(items, **kwargs)
+def get_input(prompt: str, **kwargs) -> str:
+    """Interactive input"""
+    temp_logger = Interactive("interactive")
+    return temp_logger.get_input(prompt, **kwargs)
 
 def delete_confirm(item_name: str, **kwargs) -> bool:
-    """Convenience function for delete confirmation"""
-    return interactive.delete_confirmation(item_name, **kwargs)
+    """Interactive delete confirmation"""
+    temp_logger = Interactive("interactive")
+    return temp_logger.delete_confirm(item_name, **kwargs)
 
-def show_progress(current: int, total: int, **kwargs) -> None:
-    """Convenience function for progress bar"""
-    interactive.show_progress_bar(current, total, **kwargs)
+def select_from_list(items: List, title: str = "Select an option", **kwargs):
+    """Interactive list selection"""
+    temp_logger = Interactive("interactive")
+    return temp_logger.select_from_list(items, title, **kwargs)
 
+def loading_spinner(message: str = "Processing") -> LoadingSpinner:
+    """Create a loading spinner for long-running operations"""
+    return LoadingSpinner(message)
 
-if __name__ == "__main__":
-    # Demo/test the interactive components
-    print("Interactive Components Demo")
-    print("=" * 30)
-    
-    # Test basic input
-    name = get_input("Enter your name", default="User")
-    print(f"Hello, {name}!")
-    
-    # Test confirmation
-    if confirm("Continue with demo?", default=True):
-        # Test list selection
-        items = ["Option A", "Option B", "Option C"]
-        selection = select_from_list(items, "Choose an option")
-        if selection is not None:
-            print(f"You selected: {items[selection]}")
-        
-        # Test delete confirmation
-        if delete_confirm("test_file.txt", "file"):
-            print("File would be deleted")
-        else:
-            print("Delete cancelled")
-        
-        # Test progress bar
-        import time
-        print("\nProgress bar demo:")
-        for i in range(101):
-            show_progress(i, 100)
-            time.sleep(0.02)
-        print("\nDemo complete!")
-    else:
-        print("Demo cancelled")
+def progress_tracker(total_steps: int, operation_name: str = "Operation") -> ProgressTracker:
+    """Create a progress tracker for operations with known steps"""
+    return ProgressTracker(total_steps, operation_name)
+
+def with_loading(operation: Callable, message: str = "Processing", *args, **kwargs):
+    """Execute an operation with a loading spinner"""
+    with loading_spinner(message) as spinner:
+        try:
+            result = operation(*args, **kwargs)
+            spinner.stop("✅ Completed")
+            return result
+        except Exception as e:
+            spinner.stop(f"❌ Failed: {e}")
+            raise

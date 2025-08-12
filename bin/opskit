@@ -95,7 +95,7 @@ def cli(ctx, debug, version):
     # If no command provided, enter interactive mode
     if ctx.invoked_subcommand is None:
         try:
-            opskit_cli = OpsKitCLI(debug=debug)
+            opskit_cli = OpsKitCLI()
             opskit_cli.interactive_mode()
         except Exception as e:
             handle_error(e, debug)
@@ -107,7 +107,7 @@ def cli(ctx, debug, version):
 def list(category, debug):
     """List all available tools by category"""
     try:
-        opskit_cli = OpsKitCLI(debug=debug or _debug_mode)
+        opskit_cli = OpsKitCLI()
         opskit_cli.list_tools(category=category)
     except Exception as e:
         handle_error(e, debug or _debug_mode)
@@ -123,7 +123,7 @@ def run(ctx, tool_name, debug):
     tool_args = ctx.args
     
     try:
-        opskit_cli = OpsKitCLI(debug=debug or _debug_mode)
+        opskit_cli = OpsKitCLI()
         exit_code = opskit_cli.run_tool(tool_name, tool_args)
         sys.exit(exit_code)
     except Exception as e:
@@ -136,7 +136,7 @@ def run(ctx, tool_name, debug):
 def search(query, debug):
     """Search tools by name or description"""
     try:
-        opskit_cli = OpsKitCLI(debug=debug or _debug_mode)
+        opskit_cli = OpsKitCLI()
         opskit_cli.search_tools(query)
     except Exception as e:
         handle_error(e, debug or _debug_mode)
@@ -148,7 +148,7 @@ def search(query, debug):
 def config(tool_name, debug):
     """Configuration management interface"""
     try:
-        opskit_cli = OpsKitCLI(debug=debug or _debug_mode)
+        opskit_cli = OpsKitCLI()
         if tool_name:
             opskit_cli.configure_tool(tool_name)
         else:
@@ -162,7 +162,7 @@ def config(tool_name, debug):
 def update(debug):
     """Update OpsKit to latest version (git pull)"""
     try:
-        opskit_cli = OpsKitCLI(debug=debug or _debug_mode)
+        opskit_cli = OpsKitCLI()
         opskit_cli.update_opskit()
     except Exception as e:
         handle_error(e, debug or _debug_mode)
@@ -173,7 +173,7 @@ def update(debug):
 def status(debug):
     """Show system status and health check"""
     try:
-        opskit_cli = OpsKitCLI(debug=debug or _debug_mode)
+        opskit_cli = OpsKitCLI()
         opskit_cli.show_status()
     except Exception as e:
         handle_error(e, debug or _debug_mode)

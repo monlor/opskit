@@ -56,7 +56,7 @@ storage = get_storage('tool-name')
 ```python
 # 使用 get_env_var() 获取配置，不要使用 os.environ.get()
 self.timeout = get_env_var('TIMEOUT', 30, int)
-self.debug = get_env_var('DEBUG', False, bool)
+self.max_retries = get_env_var('MAX_RETRIES', 3, int)
 ```
 
 **4. 工具类结构**
@@ -140,7 +140,7 @@ success, stdout, stderr = run_command(['mysql', '--version'])
 
 # 获取环境变量（重要：必须使用这个函数）
 timeout = get_env_var('TIMEOUT', 30, int)
-debug = get_env_var('DEBUG', False, bool)
+max_retries = get_env_var('MAX_RETRIES', 3, int)
 ```
 
 ### 交互式组件
@@ -170,9 +170,9 @@ if delete_confirm("connection", "test-db"):
 ```bash
 # .env 文件示例
 TIMEOUT=30
-DEBUG=false
 MAX_RETRIES=3
 SINGLE_TRANSACTION=true
+CACHE_CONNECTIONS=true
 ```
 
 ### 环境变量读取
@@ -181,8 +181,8 @@ class MyTool:
     def __init__(self):
         # 必须使用 get_env_var() 函数
         self.timeout = get_env_var('TIMEOUT', 30, int)
-        self.debug = get_env_var('DEBUG', False, bool)
         self.max_retries = get_env_var('MAX_RETRIES', 3, int)
+        self.cache_connections = get_env_var('CACHE_CONNECTIONS', True, bool)
         
         # 不要定义版本号
         # self.version = "2.0.0"  # ❌ 错误
@@ -259,12 +259,11 @@ class MyTool:
         
         # Load configuration from environment variables
         self.timeout = get_env_var('TIMEOUT', 30, int)
-        self.debug = get_env_var('DEBUG', False, bool)
+        self.max_retries = get_env_var('MAX_RETRIES', 3, int)
         self.verbose = get_env_var('VERBOSE', False, bool)
         
         logger.info(f"🚀 Starting {self.tool_name}")
-        if self.debug:
-            logger.info("Debug mode enabled")
+        logger.debug(f"Configuration - timeout: {self.timeout}s, max_retries: {self.max_retries}")
     
     def check_dependencies(self) -> bool:
         """Check if required dependencies are available"""

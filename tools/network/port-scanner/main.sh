@@ -5,6 +5,7 @@
 
 # Source shell libraries
 source "${OPSKIT_BASE_PATH}/common/shell/logger.sh"
+source "${OPSKIT_BASE_PATH}/common/shell/interactive.sh"
 source "${OPSKIT_BASE_PATH}/common/shell/utils.sh"
 
 # Initialize tool (TOOL_NAME and TOOL_VERSION are injected by framework)
@@ -32,17 +33,19 @@ declare -a closed_ports=()
 
 # Helper functions
 usage() {
-    echo "Usage: $0 [options]"
-    echo "Options:"
-    echo "  -h, --host HOST      Target host (default: $DEFAULT_HOST)"
-    echo "  -p, --ports RANGE    Port range (default: $DEFAULT_PORTS)"
-    echo "  -t, --timeout SEC    Connection timeout (default: $DEFAULT_TIMEOUT)"
-    echo "  --help              Show this help"
-    echo ""
-    echo "Examples:"
-    echo "  $0 -h 192.168.1.1 -p 80,443,22"
-    echo "  $0 -h localhost -p 1-65535"
-    echo "  $0 --host example.com --ports 80,443,8080,3000"
+    section "Port Scanner Usage"
+    info "Usage: $0 [options]"
+    info ""
+    info "Options:"
+    info "  -h, --host HOST      Target host (default: $DEFAULT_HOST)"
+    info "  -p, --ports RANGE    Port range (default: $DEFAULT_PORTS)"
+    info "  -t, --timeout SEC    Connection timeout (default: $DEFAULT_TIMEOUT)"
+    info "  --help              Show this help"
+    info ""
+    info "Examples:"
+    info "  $0 -h 192.168.1.1 -p 80,443,22"
+    info "  $0 -h localhost -p 1-65535"
+    info "  $0 --host example.com --ports 80,443,8080,3000"
 }
 
 # Parse command line arguments
@@ -65,7 +68,7 @@ while [[ $# -gt 0 ]]; do
             exit 0
             ;;
         *)
-            log_error "Unknown option: $1"
+            error "Unknown option: $1"
             usage
             exit 1
             ;;
@@ -99,13 +102,13 @@ get_service_name() {
 validate_host() {
     local host="$1"
     if [[ -z "$host" ]]; then
-        log_error "Host cannot be empty"
+        error "Host cannot be empty"
         return 1
     fi
     
     # Try to resolve hostname
     if ! getent hosts "$host" >/dev/null 2>&1; then
-        log_warning "Warning: Cannot resolve hostname '$host', proceeding anyway"
+        warning "Cannot resolve hostname '$host', proceeding anyway"
     fi
     
     return 0
@@ -125,7 +128,7 @@ parse_ports() {
             if [[ $range -ge 1 && $range -le 65535 ]]; then
                 ports+=("$range")
             else
-                log_error "Invalid port: $range (must be 1-65535)"
+                error "Invalid port: $range (must be 1-65535)"
                 return 1
             fi
         elif [[ "$range" =~ ^([0-9]+)-([0-9]+)$ ]]; then
@@ -138,11 +141,11 @@ parse_ports() {
                     ports+=("$port")
                 done
             else
-                log_error "Invalid port range: $range"
+                error "Invalid port range: $range"
                 return 1
             fi
         else
-            log_error "Invalid port specification: $range"
+            error "Invalid port specification: $range"
             return 1
         fi
     done
@@ -183,7 +186,7 @@ scan_ports() {
         progress_step=1
     fi
     
-    log_info "📡 Scanning $host ports ${PORTS} ($PROTOCOL)"
+    operation_start "Port scanning" "Scanning $host ports ${PORTS} ($PROTOCOL)"
     
     for port in "${ports_to_scan[@]}"; do
         ((scanned++))
@@ -198,52 +201,45 @@ scan_ports() {
         # Show progress
         if [[ $((scanned % progress_step)) -eq 0 ]] || [[ $scanned -eq $total ]]; then
             local percentage=$((scanned * 100 / total))
-            log_info "Progress: $percentage% ($scanned/$total ports scanned)"
+            progress "Progress: $percentage% ($scanned/$total ports scanned)"
         fi
     done
     
-    log_info "📊 Scan complete: ${#open_ports[@]} open, ${#closed_ports[@]} closed"
+    success "Scan complete: ${#open_ports[@]} open, ${#closed_ports[@]} closed"
 }
 
 # Display results in visual format
 display_results() {
     local host="$1"
     
-    echo ""
-    echo -e "\033[1;36m╔══════════════════════════════════════════════════════════╗\033[0m"
-    echo -e "\033[1;36m║              Port Scan Results for $host              ║\033[0m"
-    echo -e "\033[1;36m╚══════════════════════════════════════════════════════════╝\033[0m"
-    echo ""
+    section "Port Scan Results for $host"
     
     if [[ ${#open_ports[@]} -gt 0 ]]; then
-        echo -e "\033[1;32m🟢 Open Ports Found:\033[0m"
-        echo -e "\033[1;37m┌─────────┬─────────────┬─────────────────────────────────┐\033[0m"
-        echo -e "\033[1;37m│  PORT   │    STATE    │            SERVICE              │\033[0m"
-        echo -e "\033[1;37m├─────────┼─────────────┼─────────────────────────────────┤\033[0m"
+        subsection "🟢 Open Ports Found"
+        info "┌─────────┬─────────────┬─────────────────────────────────┐"
+        info "│  PORT   │    STATE    │            SERVICE              │"
+        info "├─────────┼─────────────┼─────────────────────────────────┤"
         
         for port_info in "${open_ports[@]}"; do
             local port="${port_info%:*}"
             local service="${port_info#*:}"
-            printf "\033[0;32m│  %-5s  │    OPEN     │  %-29s  │\033[0m\n" "$port" "$service"
+            info "$(printf "│  %-5s  │    OPEN     │  %-29s  │" "$port" "$service")"
         done
         
-        echo -e "\033[1;37m└─────────┴─────────────┴─────────────────────────────────┘\033[0m"
-        echo ""
+        info "└─────────┴─────────────┴─────────────────────────────────┘"
     else
-        echo -e "\033[1;33m🟡 No open ports found in the specified range\033[0m"
-        echo ""
+        warning "🟡 No open ports found in the specified range"
     fi
     
     # Summary
     local total_scanned=$((${#open_ports[@]} + ${#closed_ports[@]}))
-    echo -e "\033[1;36m📊 Summary:\033[0m"
-    echo -e "   • Host: $host"
-    echo -e "   • Port Range: $PORTS"
-    echo -e "   • Protocol: $PROTOCOL"
-    echo -e "   • Total Scanned: $total_scanned"
-    echo -e "   • Open Ports: \033[1;32m${#open_ports[@]}\033[0m"
-    echo -e "   • Closed Ports: \033[1;31m${#closed_ports[@]}\033[0m"
-    echo ""
+    display_info "📊 Summary" \
+        "Host" "$host" \
+        "Port Range" "$PORTS" \
+        "Protocol" "$PROTOCOL" \
+        "Total Scanned" "$total_scanned" \
+        "Open Ports" "${#open_ports[@]}" \
+        "Closed Ports" "${#closed_ports[@]}"
 }
 
 # Main execution
@@ -251,7 +247,7 @@ main() {
     # Validation phase
     step_start "Checking system requirements"
     if ! command -v timeout >/dev/null 2>&1; then
-        log_error "timeout command not found. Please install coreutils."
+        error "timeout command not found. Please install coreutils."
         exit 1
     fi
     step_complete "Checking system requirements"

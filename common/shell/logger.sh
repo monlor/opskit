@@ -68,12 +68,12 @@ _shell_log() {
     # Console output: simple format (just message)
     local console_message="$message"
     
-    # Color codes for different levels
+    # Color codes for different levels (matching Python logger)
     local color_reset="\033[0m"
     local color_code=""
     case "$level" in
         DEBUG)   color_code="\033[36m" ;;  # Cyan
-        INFO)    color_code="\033[32m" ;;  # Green
+        INFO)    color_code="" ;;          # No color (black/default) - matches Python logger
         WARNING) color_code="\033[33m" ;;  # Yellow
         ERROR)   color_code="\033[31m" ;;  # Red
         CRITICAL) color_code="\033[35m" ;; # Magenta

@@ -1,14 +1,19 @@
 #!/bin/bash
 # Interactive Components Library - Shell Implementation
 #
-# Provides common interactive UI components for OpsKit shell tools:
+# Provides core interactive UI components for OpsKit shell tools with same API as Python version:
 # - User input with validation
 # - Confirmation dialogs
 # - Simple selection lists
 # - Delete confirmations
-# - Progress indicators
+# - Display helpers
 #
 # Usage: source "${OPSKIT_BASE_PATH}/common/shell/interactive.sh"
+
+# Import logger if available
+if [[ -n "${OPSKIT_BASE_PATH}" && -f "${OPSKIT_BASE_PATH}/common/shell/logger.sh" ]]; then
+    source "${OPSKIT_BASE_PATH}/common/shell/logger.sh"
+fi
 
 # Color codes (if terminal supports colors)
 if [[ -t 1 && $(tput colors) -ge 8 ]]; then
@@ -39,105 +44,185 @@ use_colors() {
     [[ "$INTERACTIVE_USE_COLORS" == "true" && -n "$RED" ]]
 }
 
-# Function: get_user_input
-# Get user input with validation and optional features
-# Args:
-#   $1: prompt_text - Text to display as prompt
-#   $2: default - Default value (optional)
-#   $3: required - "true" or "false" (optional, default: true)
-#   $4: validator_function - Name of validation function (optional)
-# Returns: User input via stdout
-get_user_input() {
-    local prompt_text="$1"
-    local default="$2"
-    local required="${3:-true}"
-    local validator_function="$4"
-    local user_input=""
-    local display_prompt=""
+# Enhanced logging functions matching Python API - use unified logger
+info() {
+    local message="$1"
+    log_info "$message"
+}
+
+debug() {
+    local message="$1"
+    log_debug "$message"
+}
+
+warning() {
+    local message="$1"
+    log_warning "⚠️  $message"
+}
+
+error() {
+    local message="$1"
+    log_error "❌ $message"
+}
+
+critical() {
+    local message="$1"
+    log_critical "🚨 CRITICAL: $message"
+}
+
+section() {
+    local title="$1"
+    local width="${2:-80}"
+    local separator=""
     
-    # Format prompt
-    if [[ -n "$default" ]]; then
-        display_prompt="${prompt_text} [${default}]: "
+    # Create separator
+    for ((i=0; i<width; i++)); do
+        separator+="="
+    done
+    
+    info ""
+    info "$separator"
+    info "🔄 $title"
+    info "$separator"
+}
+
+subsection() {
+    local title="$1"
+    local width="${2:-60}"
+    local separator=""
+    
+    # Create separator
+    for ((i=0; i<width; i++)); do
+        separator+="-"
+    done
+    
+    info ""
+    info "$separator"
+    info "📋 $title"
+    info "$separator"
+}
+
+step() {
+    local step_num="$1"
+    local total_steps="$2"
+    local description="$3"
+    info "[${step_num}/${total_steps}] 🔄 ${description}"
+}
+
+success() {
+    local message="$1"
+    log_info "✅ $message"
+}
+
+failure() {
+    local message="$1"
+    log_error "❌ $message"
+}
+
+warning_msg() {
+    local message="$1"
+    warning "$message"
+}
+
+progress() {
+    local message="$1"
+    info "📊 $message"
+}
+
+connection_test() {
+    local host="$1"
+    local port="$2"
+    local result="$3"
+    
+    if [[ "$result" == "true" || "$result" == "0" ]]; then
+        success "Connection to ${host}:${port} successful"
     else
-        display_prompt="${prompt_text}: "
+        failure "Connection to ${host}:${port} failed"
     fi
+}
+
+operation_start() {
+    local operation="$1"
+    local details="$2"
     
-    # Add colors if enabled
-    if use_colors; then
-        display_prompt="${CYAN}${display_prompt}${RESET}"
+    if [[ -n "$details" ]]; then
+        info "🚀 Starting ${operation}: ${details}"
+    else
+        info "🚀 Starting ${operation}"
     fi
+}
+
+operation_complete() {
+    local operation="$1"
+    local duration="$2"
     
-    while true; do
-        # Get input
-        printf "%s" "$display_prompt" >&2
-        read -r user_input
-        
-        # Handle Ctrl+C gracefully
-        if [[ $? -ne 0 ]]; then
-            echo "" >&2
-            echo "Operation cancelled by user" >&2
-            return 1
-        fi
-        
-        # Handle empty input
-        if [[ -z "$user_input" ]]; then
-            if [[ -n "$default" ]]; then
-                echo "$default"
-                return 0
-            elif [[ "$required" != "true" ]]; then
-                echo ""
-                return 0
-            else
-                if use_colors; then
-                    echo "${RED}Input is required${RESET}" >&2
-                else
-                    echo "Input is required" >&2
-                fi
-                continue
-            fi
-        fi
-        
-        # Validate input if validator function provided
-        if [[ -n "$validator_function" ]] && command -v "$validator_function" >/dev/null 2>&1; then
-            if ! "$validator_function" "$user_input"; then
-                if use_colors; then
-                    echo "${RED}Invalid input, please try again${RESET}" >&2
-                else
-                    echo "Invalid input, please try again" >&2
-                fi
-                continue
-            fi
-        fi
-        
-        echo "$user_input"
-        return 0
+    if [[ -n "$duration" ]]; then
+        success "${operation} completed (duration: ${duration}s)"
+    else
+        success "${operation} completed"
+    fi
+}
+
+display_info() {
+    local title="$1"
+    shift
+    local -a info_pairs=("$@")
+    
+    info ""
+    info "📋 ${title}:"
+    
+    # Process key-value pairs
+    local i=0
+    while [[ $i -lt ${#info_pairs[@]} ]]; do
+        local key="${info_pairs[$i]}"
+        local value="${info_pairs[$((i+1))]}"
+        info "   ${key}: ${value}"
+        ((i+=2))
     done
 }
 
-# Function: get_password_input
-# Get password input (hidden)
-# Args:
-#   $1: prompt_text - Text to display as prompt
-# Returns: Password via stdout
-get_password_input() {
-    local prompt_text="$1"
-    local password=""
-    local display_prompt="${prompt_text}: "
+display_list() {
+    local title="$1"
+    shift
+    local -a items=("$@")
+    local indent="  • "
     
-    # Add colors if enabled
-    if use_colors; then
-        display_prompt="${CYAN}${display_prompt}${RESET}"
-    fi
+    info ""
+    info "📊 ${title} (${#items[@]} items):"
     
-    printf "%s" "$display_prompt" >&2
-    read -rs password
-    echo "" >&2  # New line after hidden input
-    
-    echo "$password"
+    local item
+    for item in "${items[@]}"; do
+        info "${indent}${item}"
+    done
 }
 
+confirmation_required() {
+    local message="$1"
+    warning_msg "Confirmation required: ${message}"
+}
+
+user_cancelled() {
+    local operation="${1:-operation}"
+    info "👋 User cancelled ${operation}"
+}
+
+retry_attempt() {
+    local attempt="$1"
+    local max_attempts="$2"
+    local operation="$3"
+    warning_msg "Retry attempt ${attempt}/${max_attempts} for ${operation}"
+}
+
+cache_operation() {
+    local operation="$1"
+    local item="$2"
+    debug "Cache ${operation}: ${item}"
+}
+
+# Core interactive functions matching Python API
+
 # Function: confirm
-# Show confirmation dialog
+# Interactive confirmation matching Python API
 # Args:
 #   $1: message - Confirmation message
 #   $2: default - "true" or "false" (optional, default: false)
@@ -149,6 +234,8 @@ confirm() {
     local default_char="n"
     local other_char="y"
     local display_prompt=""
+    
+    confirmation_required "$message"
     
     if [[ "$default" == "true" ]]; then
         default_char="Y"
@@ -169,7 +256,7 @@ confirm() {
         # Handle Ctrl+C
         if [[ $? -ne 0 ]]; then
             echo "" >&2
-            echo "Operation cancelled by user" >&2
+            user_cancelled "confirmation"
             return 1
         fi
         
@@ -179,8 +266,10 @@ confirm() {
         # Handle empty response (use default)
         if [[ -z "$response" ]]; then
             if [[ "$default" == "true" ]]; then
+                info "✅ User confirmed: $message"
                 return 0
             else
+                info "❌ User declined: $message"
                 return 1
             fi
         fi
@@ -188,9 +277,11 @@ confirm() {
         # Check response
         case "$response" in
             y|yes|true|1)
+                info "✅ User confirmed: $message"
                 return 0
                 ;;
             n|no|false|0)
+                info "❌ User declined: $message"
                 return 1
                 ;;
             *)
@@ -204,8 +295,142 @@ confirm() {
     done
 }
 
+# Function: get_input
+# Get user input matching Python API
+# Args:
+#   $1: prompt - Text to display as prompt
+#   $2: default - Default value (optional)
+#   $3: password - "true" for password input (optional, default: false)
+#   $4: validator_function - Name of validation function (optional)
+#   $5: error_message - Error message for validation (optional)
+# Returns: User input via stdout
+get_input() {
+    local prompt="$1"
+    local default="$2"
+    local password="${3:-false}"
+    local validator_function="$4"
+    local error_message="${5:-Invalid input}"
+    local user_input=""
+    local display_prompt=""
+    
+    debug "Requesting input: $prompt"
+    
+    # Format prompt
+    if [[ -n "$default" ]]; then
+        display_prompt="${prompt} [${default}]: "
+    else
+        display_prompt="${prompt}: "
+    fi
+    
+    # Add colors if enabled
+    if use_colors; then
+        display_prompt="${CYAN}${display_prompt}${RESET}"
+    fi
+    
+    while true; do
+        # Get input
+        if [[ "$password" == "true" ]]; then
+            printf "%s" "$display_prompt" >&2
+            read -rs user_input
+            echo "" >&2  # New line after hidden input
+        else
+            printf "%s" "$display_prompt" >&2
+            read -r user_input
+        fi
+        
+        # Handle Ctrl+C gracefully
+        if [[ $? -ne 0 ]]; then
+            echo "" >&2
+            user_cancelled "input"
+            return 1
+        fi
+        
+        # Handle empty input
+        if [[ -z "$user_input" ]]; then
+            if [[ -n "$default" ]]; then
+                echo "$default"
+                debug "User input received for: $prompt"
+                return 0
+            else
+                warning "Input is required"
+                continue
+            fi
+        fi
+        
+        # Validate input if validator function provided
+        if [[ -n "$validator_function" ]] && command -v "$validator_function" >/dev/null 2>&1; then
+            if ! "$validator_function" "$user_input"; then
+                warning "$error_message"
+                continue
+            fi
+        fi
+        
+        echo "$user_input"
+        debug "User input received for: $prompt"
+        return 0
+    done
+}
+
+# Function: delete_confirm
+# Specialized confirmation for delete operations matching Python API
+# Args:
+#   $1: item_name - Name of item being deleted
+#   $2: item_type - Type of item (optional, default: "item")
+#   $3: force_typing - "true" to require typing confirmation (optional, default: false)
+#   $4: confirmation_text - Text to type for confirmation (optional, default: "DELETE")
+# Returns: 0 for confirmed, 1 for cancelled
+delete_confirm() {
+    local item_name="$1"
+    local item_type="${2:-item}"
+    local force_typing="${3:-false}"
+    local confirmation_text="${4:-DELETE}"
+    
+    warning_msg "Delete confirmation requested for: $item_name"
+    
+    # Display warning
+    if use_colors; then
+        echo "" >&2
+        echo "${RED}⚠️  WARNING: Destructive Operation${RESET}" >&2
+        echo "You are about to delete ${item_type}: ${YELLOW}${item_name}${RESET}" >&2
+        echo "${RED}This action cannot be undone!${RESET}" >&2
+    else
+        echo "" >&2
+        echo "⚠️  WARNING: Destructive Operation" >&2
+        echo "You are about to delete ${item_type}: ${item_name}" >&2
+        echo "This action cannot be undone!" >&2
+    fi
+    
+    if [[ "$force_typing" == "true" ]]; then
+        # Require typing confirmation
+        local typed_confirmation
+        typed_confirmation=$(get_input "Type '${confirmation_text}' to confirm deletion" "" "false" "validate_delete_confirmation" "You must type '${confirmation_text}' exactly to confirm")
+        if [[ $? -ne 0 ]]; then
+            return 1
+        fi
+        
+        local typed_upper=$(echo "$typed_confirmation" | tr '[:lower:]' '[:upper:]')
+        local confirmation_upper=$(echo "$confirmation_text" | tr '[:lower:]' '[:upper:]')
+        if [[ "$typed_upper" == "$confirmation_upper" ]]; then
+            warning_msg "Delete confirmed for: $item_name"
+            return 0
+        else
+            info "Delete cancelled for: $item_name"
+            return 1
+        fi
+    else
+        # Simple yes/no confirmation
+        if confirm "Delete ${item_type} '${item_name}'?" "false"; then
+            warning_msg "Delete confirmed for: $item_name"
+            return 0
+        else
+            info "Delete cancelled for: $item_name"
+            return 1
+        fi
+    fi
+}
+
 # Function: select_from_list
-# Display a selection list and get user choice
+# Display a selection list and get user choice matching Python API
 # Args:
 #   $1: title - Title for the selection
 #   $@: items - List of items to select from
@@ -217,12 +442,10 @@ select_from_list() {
     local selection=""
     local i
     
+    info "List selection requested: $title (${#items[@]} items)"
+    
     if [[ ${#items[@]} -eq 0 ]]; then
-        if use_colors; then
-            echo "${YELLOW}No items to select from${RESET}" >&2
-        else
-            echo "No items to select from" >&2
-        fi
+        warning "No items to select from"
         return 1
     fi
     
@@ -262,13 +485,14 @@ select_from_list() {
         # Handle Ctrl+C
         if [[ $? -ne 0 ]]; then
             echo "" >&2
-            echo "Selection cancelled by user" >&2
+            info "User cancelled selection from: $title"
             return 1
         fi
         
         # Handle cancel
         local selection_lower=$(echo "$selection" | tr '[:upper:]' '[:lower:]')
         if [[ "$selection_lower" == "cancel" || "$selection_lower" == "c" || "$selection_lower" == "quit" || "$selection_lower" == "q" ]]; then
+            info "User cancelled selection from: $title"
             return 1
         fi
         
@@ -277,6 +501,7 @@ select_from_list() {
             local index=$((selection - 1))
             if [[ $index -ge 0 && $index -lt ${#items[@]} ]]; then
                 echo "$index"
+                info "User selected option $index from: $title"
                 return 0
             fi
         fi
@@ -290,252 +515,8 @@ select_from_list() {
     done
 }
 
-# Function: delete_confirmation
-# Specialized confirmation for delete operations
-# Args:
-#   $1: item_name - Name of item being deleted
-#   $2: item_type - Type of item (optional, default: "item")
-#   $3: force_typing - "true" to require typing confirmation (optional, default: false)
-# Returns: 0 for confirmed, 1 for cancelled
-delete_confirmation() {
-    local item_name="$1"
-    local item_type="${2:-item}"
-    local force_typing="${3:-false}"
-    local confirmation_text="DELETE"
-    
-    # Display warning
-    if use_colors; then
-        echo "" >&2
-        echo "${RED}⚠️  WARNING: Destructive Operation${RESET}" >&2
-        echo "You are about to delete ${item_type}: ${YELLOW}${item_name}${RESET}" >&2
-        echo "${RED}This action cannot be undone!${RESET}" >&2
-    else
-        echo "" >&2
-        echo "⚠️  WARNING: Destructive Operation" >&2
-        echo "You are about to delete ${item_type}: ${item_name}" >&2
-        echo "This action cannot be undone!" >&2
-    fi
-    
-    if [[ "$force_typing" == "true" ]]; then
-        # Require typing confirmation
-        local typed_confirmation
-        typed_confirmation=$(get_user_input "Type '${confirmation_text}' to confirm deletion")
-        if [[ $? -ne 0 ]]; then
-            return 1
-        fi
-        
-        local typed_upper=$(echo "$typed_confirmation" | tr '[:lower:]' '[:upper:]')
-        if [[ "$typed_upper" == "$confirmation_text" ]]; then
-            return 0
-        else
-            if use_colors; then
-                echo "${RED}Confirmation text did not match${RESET}" >&2
-            else
-                echo "Confirmation text did not match" >&2
-            fi
-            return 1
-        fi
-    else
-        # Simple yes/no confirmation
-        confirm "Delete ${item_type} '${item_name}'?" "false"
-        return $?
-    fi
-}
-
-# Function: show_progress_bar
-# Display a progress bar
-# Args:
-#   $1: current - Current progress value
-#   $2: total - Total value for completion
-#   $3: prefix - Text before progress bar (optional, default: "Progress")
-#   $4: suffix - Text after progress bar (optional, default: "Complete")
-show_progress_bar() {
-    local current="$1"
-    local total="$2"
-    local prefix="${3:-Progress}"
-    local suffix="${4:-Complete}"
-    local length=50
-    local fill="█"
-    local empty="-"
-    
-    if [[ $total -eq 0 ]]; then
-        return 0
-    fi
-    
-    # Calculate progress
-    local percent=$(( (current * 100) / total ))
-    local filled_length=$(( (current * length) / total ))
-    local empty_length=$(( length - filled_length ))
-    
-    # Build progress bar
-    local bar=""
-    local i
-    
-    # Add filled portion
-    for (( i=0; i<filled_length; i++ )); do
-        bar+="$fill"
-    done
-    
-    # Add empty portion  
-    for (( i=0; i<empty_length; i++ )); do
-        bar+="$empty"
-    done
-    
-    # Display progress bar
-    if use_colors; then
-        printf "\r%s |${GREEN}%s${RESET}| %3d%% %s" "$prefix" "$bar" "$percent" "$suffix" >&2
-    else
-        printf "\r%s |%s| %3d%% %s" "$prefix" "$bar" "$percent" "$suffix" >&2
-    fi
-}
-
-# Function: show_spinner
-# Show a simple spinner (call in loops)
-# Args:
-#   $1: message - Message to show with spinner (optional)
-show_spinner() {
-    local message="${1:-Processing}"
-    local spinner_chars=("|" "/" "-" "\\")
-    local char_index=$(( (SECONDS % 4) ))
-    local spinner_char="${spinner_chars[$char_index]}"
-    
-    if use_colors; then
-        printf "\r${CYAN}%s${RESET} %s" "$spinner_char" "$message" >&2
-    else
-        printf "\r%s %s" "$spinner_char" "$message" >&2
-    fi
-}
-
-# Function: display_table
-# Display data in a simple table format
-# Args:
-#   $1: title - Optional table title
-#   $@: rows - Each argument is a row with columns separated by |
-display_table() {
-    local title=""
-    local rows=()
-    
-    # Check if first argument is title (starts with uppercase)
-    if [[ "$1" =~ ^[A-Z] ]] && [[ $# -gt 1 ]]; then
-        title="$1"
-        shift
-    fi
-    
-    rows=("$@")
-    
-    if [[ ${#rows[@]} -eq 0 ]]; then
-        if use_colors; then
-            echo "${YELLOW}No data to display${RESET}" >&2
-        else
-            echo "No data to display" >&2
-        fi
-        return 0
-    fi
-    
-    # Display title
-    if [[ -n "$title" ]]; then
-        if use_colors; then
-            echo "" >&2
-            echo "${CYAN}=== ${title} ===${RESET}" >&2
-        else
-            echo "" >&2
-            echo "=== ${title} ===" >&2
-        fi
-    fi
-    
-    # Display rows (simple format)
-    local row
-    for row in "${rows[@]}"; do
-        # Replace | with formatted separator
-        local formatted_row=$(echo "$row" | sed 's/|/ | /g')
-        echo "$formatted_row" >&2
-    done
-}
-
-# Function: pause_for_input
-# Pause execution until user presses Enter
-# Args:
-#   $1: message - Message to display (optional)
-pause_for_input() {
-    local message="${1:-Press Enter to continue...}"
-    
-    if use_colors; then
-        printf "${CYAN}%s${RESET}" "$message" >&2
-    else
-        printf "%s" "$message" >&2
-    fi
-    
-    read -r
-}
-
-# Function: show_menu
-# Display a menu and get user selection
-# Args:
-#   $1: title - Menu title
-#   $@: options - Menu options
-# Returns: Selected index (0-based) via stdout
-show_menu() {
-    local title="$1"
-    shift
-    local options=("$@")
-    
-    while true; do
-        # Display menu
-        if use_colors; then
-            echo "" >&2
-            echo "${CYAN}=== ${title} ===${RESET}" >&2
-        else
-            echo "" >&2
-            echo "=== ${title} ===" >&2
-        fi
-        
-        local i
-        for i in "${!options[@]}"; do
-            local display_num=$((i + 1))
-            if use_colors; then
-                printf "${YELLOW}%2d.${RESET} %s\n" "$display_num" "${options[$i]}" >&2
-            else
-                printf "%2d. %s\n" "$display_num" "${options[$i]}" >&2
-            fi
-        done
-        
-        # Add quit option
-        local quit_num=$((${#options[@]} + 1))
-        if use_colors; then
-            printf "${YELLOW}%2d.${RESET} Quit\n" "$quit_num" >&2
-        else
-            printf "%2d. Quit\n" "$quit_num" >&2
-        fi
-        
-        # Get selection
-        local selection
-        selection=$(get_user_input "Your choice" "" "true")
-        if [[ $? -ne 0 ]]; then
-            return 1
-        fi
-        
-        # Validate selection
-        if [[ "$selection" =~ ^[0-9]+$ ]]; then
-            if [[ $selection -eq $quit_num ]]; then
-                return 1
-            elif [[ $selection -ge 1 && $selection -le ${#options[@]} ]]; then
-                echo $((selection - 1))
-                return 0
-            fi
-        fi
-        
-        # Invalid selection
-        if use_colors; then
-            echo "${RED}Invalid selection. Please try again.${RESET}" >&2
-        else
-            echo "Invalid selection. Please try again." >&2
-        fi
-        echo "" >&2
-    done
-}
-
 # Validation helper functions
-# These can be used with get_user_input as validator functions
+# These can be used with get_input as validator functions
 
 # Validate non-empty string
 validate_not_empty() {
@@ -574,49 +555,53 @@ validate_port() {
     [[ "$port" =~ ^[0-9]+$ ]] && [[ $port -ge 1 && $port -le 65535 ]]
 }
 
+# Validate delete confirmation text
+validate_delete_confirmation() {
+    local input="$1"
+    local expected="${INTERACTIVE_DELETE_CONFIRMATION_TEXT:-DELETE}"
+    local input_upper=$(echo "$input" | tr '[:lower:]' '[:upper:]')
+    local expected_upper=$(echo "$expected" | tr '[:lower:]' '[:upper:]')
+    [[ "$input_upper" == "$expected_upper" ]]
+}
+
 # Demo function (if script is run directly)
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     echo "Interactive Components Demo (Shell)"
     echo "=================================="
     echo
     
+    section "Interactive Components Test"
+    
     # Test basic input
-    name=$(get_user_input "Enter your name" "User")
-    echo "Hello, $name!"
+    name=$(get_input "Enter your name" "User")
+    success "Hello, $name!"
     echo
     
     # Test confirmation
     if confirm "Continue with demo?" "true"; then
-        echo "Continuing..."
+        success "Continuing..."
         
         # Test list selection
         items=("Option A" "Option B" "Option C")
         echo
         selection=$(select_from_list "Choose an option" "${items[@]}")
         if [[ $? -eq 0 ]]; then
-            echo "You selected: ${items[$selection]}"
+            success "You selected: ${items[$selection]}"
         else
-            echo "Selection cancelled"
+            info "Selection cancelled"
         fi
         echo
         
         # Test delete confirmation
-        if delete_confirmation "test_file.txt" "file" "false"; then
-            echo "File would be deleted"
+        if delete_confirm "test_file.txt" "file" "false"; then
+            success "File would be deleted"
         else
-            echo "Delete cancelled"
+            info "Delete cancelled"
         fi
         echo
         
-        # Test progress bar
-        echo "Progress bar demo:"
-        for i in {0..100}; do
-            show_progress_bar $i 100 "Loading" "Done"
-            sleep 0.02
-        done
-        echo
-        echo "Demo complete!"
+        success "Demo complete!"
     else
-        echo "Demo cancelled"
+        info "Demo cancelled"
     fi
 fi

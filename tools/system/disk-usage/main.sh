@@ -8,6 +8,7 @@
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${OPSKIT_BASE_PATH}/common/shell/logger.sh"
 source "${OPSKIT_BASE_PATH}/common/shell/utils.sh"
+source "${OPSKIT_BASE_PATH}/common/shell/interactive.sh"
 
 # Tool information will be injected by cli.py
 # TOOL_NAME and TOOL_VERSION are provided by the framework
@@ -44,7 +45,7 @@ get_disk_usage() {
     # Get disk usage data
     local df_output
     if ! df_output=$(timeout "$TIMEOUT" df $df_options 2>/dev/null); then
-        step_error "get_disk_usage" "Failed to get disk usage information"
+        error "Failed to get disk usage information"
         return 1
     fi
     
@@ -91,9 +92,9 @@ check_thresholds() {
     
     if [[ -n "$usage" && "$usage" =~ ^[0-9]+$ ]]; then
         if [[ $usage -ge $CRITICAL_THRESHOLD ]]; then
-            log_error "CRITICAL: $mount is ${usage}% full"
+            critical "$mount is ${usage}% full"
         elif [[ $usage -ge $WARNING_THRESHOLD ]]; then
-            log_warn "WARNING: $mount is ${usage}% full"
+            warning "$mount is ${usage}% full"
         fi
     fi
 }
@@ -119,9 +120,9 @@ format_table() {
     local line_count=0
     
     if [[ "$SHOW_HEADER" == "true" ]]; then
-        echo -e "${BOLD}Filesystem Usage Report${NC}"
-        echo -e "${BOLD}$(echo "$df_data" | head -1)${NC}"
-        echo "----------------------------------------"
+        subsection "Filesystem Usage Report"
+        info "$(echo "$df_data" | head -1)"
+        info "----------------------------------------"
     fi
     
     # Process each line (skip header)
@@ -144,7 +145,7 @@ format_table() {
         # Check entry limit
         ((line_count++))
         if [[ $line_count -gt $MAX_ENTRIES ]]; then
-            echo "... (showing first $MAX_ENTRIES entries)"
+            info "... (showing first $MAX_ENTRIES entries)"
             break
         fi
         
@@ -166,7 +167,7 @@ format_table() {
             fi
         fi
         
-        echo -e "${color}$line${NC}"
+        info "${color}$line${NC}"
         
         # Check thresholds and alert
         check_thresholds "$usage_percent" "$mount_point"
@@ -195,14 +196,14 @@ format_json() {
     done
     
     json_output="$json_output]"
-    echo "$json_output"
+    info "$json_output"
 }
 
 format_csv() {
     local df_data="$1"
     
     if [[ "$SHOW_HEADER" == "true" ]]; then
-        echo "Filesystem,Mount,Usage%"
+        info "Filesystem,Mount,Usage%"
     fi
     
     echo "$df_data" | tail -n +2 | while IFS= read -r line; do
@@ -213,57 +214,67 @@ format_csv() {
         mount_point=$(get_mount_point "$line")
         usage_percent=$(parse_usage_percentage "$line")
         
-        echo "$filesystem,$mount_point,$usage_percent"
+        info "$filesystem,$mount_point,$usage_percent"
     done
 }
 
 main() {
-    # Start tool execution
-    tool_start "$TOOL_NAME"
+    # Start tool execution with enhanced logging
+    section "Disk Usage Analysis Tool"
+    operation_start "Disk Usage Analysis" "analyzing filesystem usage"
+    
+    # Show configuration info
+    display_info "Configuration Settings" \
+        "Warning Threshold" "${WARNING_THRESHOLD}%" \
+        "Critical Threshold" "${CRITICAL_THRESHOLD}%" \
+        "Output Format" "$OUTPUT_FORMAT" \
+        "Timeout" "${TIMEOUT}s" \
+        "Show Human Readable" "$SHOW_HUMAN_READABLE" \
+        "Exclude TmpFS" "$EXCLUDE_TMPFS"
     
     # Debug output if enabled
-    log_debug "Configuration loaded:"
-    log_debug "  WARNING_THRESHOLD=$WARNING_THRESHOLD"
-    log_debug "  CRITICAL_THRESHOLD=$CRITICAL_THRESHOLD"
-    log_debug "  OUTPUT_FORMAT=$OUTPUT_FORMAT"
-    log_debug "  TIMEOUT=$TIMEOUT"
+    debug "Full configuration loaded:"
+    debug "  WARNING_THRESHOLD=$WARNING_THRESHOLD"
+    debug "  CRITICAL_THRESHOLD=$CRITICAL_THRESHOLD"
+    debug "  OUTPUT_FORMAT=$OUTPUT_FORMAT"
+    debug "  TIMEOUT=$TIMEOUT"
     
     # Get disk usage information
-    step_start "Getting disk usage information"
+    step 1 2 "Getting disk usage information"
     local disk_data
     if ! disk_data=$(get_disk_usage); then
-        tool_error "$TOOL_NAME" "Failed to get disk usage data"
+        failure "Failed to get disk usage data"
         exit 1
     fi
-    step_complete "Getting disk usage information"
+    success "Disk usage data retrieved successfully"
     
     # Format and display output
-    step_start "Formatting and displaying output"
+    step 2 2 "Formatting and displaying output"
     format_output "$disk_data"
-    step_complete "Formatting and displaying output"
+    success "Output formatted and displayed"
     
     # Tool completion
-    tool_complete "$TOOL_NAME"
+    operation_complete "Disk Usage Analysis"
 }
 
 # Handle help flag
 if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
-    echo "Usage: $0 [options]"
-    echo ""
-    echo "Environment Variables:"
-    echo "  WARNING_THRESHOLD    - Warning threshold percentage (default: 80)"
-    echo "  CRITICAL_THRESHOLD   - Critical threshold percentage (default: 95)"
-    echo "  OUTPUT_FORMAT        - Output format: table, json, csv (default: table)"
-    echo "  USE_COLORS          - Enable colored output (default: true)"
-    echo "  SHOW_HEADER         - Show table header (default: true)"
-    echo "  MAX_ENTRIES         - Maximum entries to display (default: 20)"
-    echo "  TIMEOUT             - Command timeout in seconds (default: 10)"
-    echo "  DEBUG               - Enable debug output (default: false)"
-    echo ""
-    echo "Global overrides (using DISK_USAGE_ prefix):"
-    echo "  DISK_USAGE_WARNING_THRESHOLD=90"
-    echo "  DISK_USAGE_OUTPUT_FORMAT=json"
-    echo ""
+    section "Disk Usage Analysis Tool Help"
+    info "Usage: $0 [options]"
+    info ""
+    subsection "Environment Variables"
+    info "  WARNING_THRESHOLD    - Warning threshold percentage (default: 80)"
+    info "  CRITICAL_THRESHOLD   - Critical threshold percentage (default: 95)"
+    info "  OUTPUT_FORMAT        - Output format: table, json, csv (default: table)"
+    info "  USE_COLORS          - Enable colored output (default: true)"
+    info "  SHOW_HEADER         - Show table header (default: true)"
+    info "  MAX_ENTRIES         - Maximum entries to display (default: 20)"
+    info "  TIMEOUT             - Command timeout in seconds (default: 10)"
+    info "  DEBUG               - Enable debug output (default: false)"
+    info ""
+    subsection "Global overrides (using DISK_USAGE_ prefix)"
+    info "  DISK_USAGE_WARNING_THRESHOLD=90"
+    info "  DISK_USAGE_OUTPUT_FORMAT=json"
     exit 0
 fi
 

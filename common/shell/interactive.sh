@@ -303,6 +303,7 @@ confirm() {
 #   $3: password - "true" for password input (optional, default: false)
 #   $4: validator_function - Name of validation function (optional)
 #   $5: error_message - Error message for validation (optional)
+#   $6: required - "true" to require input, "false" to allow empty (optional, default: true)
 # Returns: User input via stdout
 get_input() {
     local prompt="$1"
@@ -310,6 +311,7 @@ get_input() {
     local password="${3:-false}"
     local validator_function="$4"
     local error_message="${5:-Invalid input}"
+    local required="${6:-true}"
     local user_input=""
     local display_prompt=""
     
@@ -350,6 +352,11 @@ get_input() {
             if [[ -n "$default" ]]; then
                 echo "$default"
                 debug "User input received for: $prompt"
+                return 0
+            elif [[ "$required" == "false" ]]; then
+                # Allow empty input when not required
+                echo ""
+                debug "User input received for: $prompt (empty allowed)"
                 return 0
             else
                 warning "Input is required"

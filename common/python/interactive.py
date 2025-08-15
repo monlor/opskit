@@ -296,7 +296,7 @@ class Interactive:
                 return False
     
     def get_input(self, prompt: str, default: str = "", password: bool = False, 
-                  validator=None, error_message: str = "Invalid input", **kwargs) -> str:
+                  validator=None, error_message: str = "Invalid input", required: bool = True, **kwargs) -> str:
         """Interactive input with logging"""
         self.debug(f"Requesting input: {prompt}")
         
@@ -317,6 +317,9 @@ class Interactive:
                 if not user_input.strip():
                     if default:
                         user_input = default
+                    elif not required:
+                        # Allow empty input when not required
+                        return ""
                     else:
                         self.logger.warning("Input is required")
                         continue

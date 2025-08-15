@@ -19,7 +19,8 @@ sys.path.insert(0, os.path.join(os.environ['OPSKIT_BASE_PATH'], 'common/python')
 
 from logger import get_logger
 from storage import get_storage
-from utils import run_command, get_user_input, timestamp, get_env_var
+from utils import run_command, timestamp, get_env_var
+from interactive import get_interactive
 
 # Third-party imports
 try:
@@ -27,6 +28,7 @@ try:
     from colorama import Fore, Back, Style
     colorama.init()
 except ImportError as e:
+    # Use basic logging for dependency errors since interactive isn't available yet
     print(f"Missing required dependency: {e}")
     print("Please ensure all dependencies are installed.")
     sys.exit(1)
@@ -34,6 +36,7 @@ except ImportError as e:
 # Initialize OpsKit components
 logger = get_logger(__name__)
 storage = get_storage('k8s-resource-copy')
+interactive = get_interactive(__name__, 'k8s-resource-copy')
 
 
 @dataclass
@@ -466,22 +469,22 @@ class ResourceSelector:
     
     def __init__(self):
         self.show_colors = get_env_var('COLOR_OUTPUT', True, bool)
+        self.interactive = get_interactive(__name__, 'k8s-resource-copy')
     
     def select_resources(self, resources: List[K8sResource]) -> List[K8sResource]:
         """Interactive multi-resource selection"""
         if not resources:
-            print("No resources found.")
+            self.interactive.warning_msg("No resources found.")
             return []
         
-        print(f"\n{Fore.CYAN}Available Resources:{Style.RESET_ALL}")
-        print("=" * 50)
+        self.interactive.subsection("Available Resources")
         
         selected = set()
         
         while True:
             self._display_resources(resources, selected)
             
-            choice = input(f"\n{Fore.YELLOW}Select resources (number/range/all/done): {Style.RESET_ALL}").strip().lower()
+            choice = self.interactive.get_input("Select resources (number/range/all/done)").lower()
             
             if choice == 'done':
                 break
@@ -494,7 +497,7 @@ class ResourceSelector:
                     start, end = map(int, choice.split('-'))
                     selected.update(range(start - 1, end))
                 except ValueError:
-                    print(f"{Fore.RED}Invalid range format{Style.RESET_ALL}")
+                    self.interactive.warning_msg("Invalid range format")
             elif ',' in choice:
                 try:
                     indices = [int(x.strip()) - 1 for x in choice.split(',')]
@@ -505,7 +508,7 @@ class ResourceSelector:
                             else:
                                 selected.add(idx)
                 except ValueError:
-                    print(f"{Fore.RED}Invalid selection format{Style.RESET_ALL}")
+                    self.interactive.warning_msg("Invalid selection format")
             else:
                 try:
                     idx = int(choice) - 1
@@ -515,9 +518,9 @@ class ResourceSelector:
                         else:
                             selected.add(idx)
                     else:
-                        print(f"{Fore.RED}Invalid resource number{Style.RESET_ALL}")
+                        self.interactive.warning_msg("Invalid resource number")
                 except ValueError:
-                    print(f"{Fore.RED}Invalid input{Style.RESET_ALL}")
+                    self.interactive.warning_msg("Invalid input")
         
         selected_resources = [resources[i] for i in selected]
         
@@ -525,31 +528,31 @@ class ResourceSelector:
         if selected_resources:
             auto_included = self._include_relationships(selected_resources, resources)
             if auto_included:
-                print(f"\n{Fore.GREEN}Auto-included related resources:{Style.RESET_ALL}")
+                self.interactive.info("Auto-included related resources:")
                 for resource in auto_included:
-                    print(f"  + {resource.full_identifier}")
+                    self.interactive.info(f"  + {resource.full_identifier}")
                 selected_resources.extend(auto_included)
         
         return selected_resources
     
     def _display_resources(self, resources: List[K8sResource], selected: Set[int]):
         """Display resources with selection status"""
-        print()
+        self.interactive.info("")
         for i, resource in enumerate(resources):
-            status = f"{Fore.GREEN}[✓]{Style.RESET_ALL}" if i in selected else f"{Fore.RED}[ ]{Style.RESET_ALL}"
+            status = "✓" if i in selected else " "
             relationships = f" ({len(resource.relationships)} related)" if resource.relationships else ""
-            print(f"{status} {i + 1:2}. {resource.full_identifier}{relationships}")
+            self.interactive.info(f"[{status}] {i + 1:2}. {resource.full_identifier}{relationships}")
         
         if selected:
-            print(f"\n{Fore.CYAN}Selected: {len(selected)} resources{Style.RESET_ALL}")
+            self.interactive.info(f"\nSelected: {len(selected)} resources")
         
-        print(f"\n{Fore.YELLOW}Commands:{Style.RESET_ALL}")
-        print("  - Number: Toggle resource selection")
-        print("  - Range (1-5): Select range of resources") 
-        print("  - Multiple (1,3,5): Select multiple resources")
-        print("  - 'all': Select all resources")
-        print("  - 'clear': Clear all selections")
-        print("  - 'done': Finish selection")
+        self.interactive.info("\nCommands:")
+        self.interactive.info("  - Number: Toggle resource selection")
+        self.interactive.info("  - Range (1-5): Select range of resources") 
+        self.interactive.info("  - Multiple (1,3,5): Select multiple resources")
+        self.interactive.info("  - 'all': Select all resources")
+        self.interactive.info("  - 'clear': Clear all selections")
+        self.interactive.info("  - 'done': Finish selection")
     
     def _include_relationships(self, selected_resources: List[K8sResource], 
                              all_resources: List[K8sResource]) -> List[K8sResource]:
@@ -570,17 +573,17 @@ class ResourceSelector:
     def select_context(self, contexts: List[str], current: str = None) -> Optional[str]:
         """Select kubectl context"""
         if not contexts:
-            print("No contexts available")
+            self.interactive.warning_msg("No contexts available")
             return None
         
-        print(f"\n{Fore.CYAN}Available Contexts:{Style.RESET_ALL}")
+        self.interactive.info("\nAvailable Contexts:")
         for i, context in enumerate(contexts):
             current_mark = " (current)" if context == current else ""
-            print(f"  {i + 1}. {context}{current_mark}")
+            self.interactive.info(f"  {i + 1}. {context}{current_mark}")
         
         while True:
             try:
-                choice = input(f"\n{Fore.YELLOW}Select context (number): {Style.RESET_ALL}")
+                choice = self.interactive.get_input("Select context (number or enter for current)")
                 if not choice:
                     return current
                 
@@ -588,32 +591,32 @@ class ResourceSelector:
                 if 0 <= idx < len(contexts):
                     return contexts[idx]
                 else:
-                    print(f"{Fore.RED}Invalid context number{Style.RESET_ALL}")
+                    self.interactive.warning_msg("Invalid context number")
             except ValueError:
-                print(f"{Fore.RED}Please enter a valid number{Style.RESET_ALL}")
+                self.interactive.warning_msg("Please enter a valid number")
             except KeyboardInterrupt:
                 return None
     
     def select_namespace(self, namespaces: List[str]) -> Optional[str]:
         """Select namespace"""
         if not namespaces:
-            print("No namespaces available")
+            self.interactive.warning_msg("No namespaces available")
             return None
         
-        print(f"\n{Fore.CYAN}Available Namespaces:{Style.RESET_ALL}")
+        self.interactive.info("\nAvailable Namespaces:")
         for i, ns in enumerate(namespaces):
-            print(f"  {i + 1}. {ns}")
+            self.interactive.info(f"  {i + 1}. {ns}")
         
         while True:
             try:
-                choice = input(f"\n{Fore.YELLOW}Select namespace (number): {Style.RESET_ALL}")
+                choice = self.interactive.get_input("Select namespace (number)")
                 idx = int(choice) - 1
                 if 0 <= idx < len(namespaces):
                     return namespaces[idx]
                 else:
-                    print(f"{Fore.RED}Invalid namespace number{Style.RESET_ALL}")
+                    self.interactive.warning_msg("Invalid namespace number")
             except ValueError:
-                print(f"{Fore.RED}Please enter a valid number{Style.RESET_ALL}")
+                self.interactive.warning_msg("Please enter a valid number")
             except KeyboardInterrupt:
                 return None
 
@@ -663,8 +666,8 @@ class K8sResourceCopyTool:
         
         # Check kubectl
         if not self.kubectl.check_kubectl():
-            print(f"{Fore.RED}❌ kubectl is required but not found{Style.RESET_ALL}")
-            print("Please install kubectl: https://kubernetes.io/docs/tasks/tools/")
+            interactive.failure("kubectl is required but not found")
+            interactive.info("Please install kubectl: https://kubernetes.io/docs/tasks/tools/")
             return False
         
         # Check krew (optional but recommended)
@@ -677,14 +680,14 @@ class K8sResourceCopyTool:
                     logger.info(f"Installing missing plugin: {plugin_name}")
                     self.kubectl.install_plugin(plugin_name)
         else:
-            print(f"{Fore.YELLOW}⚠️ krew is not installed - some features may be limited{Style.RESET_ALL}")
-            print("Install krew for enhanced functionality: https://krew.sigs.k8s.io/docs/user-guide/setup/install/")
+            interactive.warning_msg("krew is not installed - some features may be limited")
+            interactive.info("Install krew for enhanced functionality: https://krew.sigs.k8s.io/docs/user-guide/setup/install/")
         
         # Verify cluster access
         contexts = self.kubectl.get_contexts()
         if not contexts:
-            print(f"{Fore.RED}❌ No kubectl contexts found{Style.RESET_ALL}")
-            print("Please configure kubectl with at least one cluster context")
+            interactive.failure("No kubectl contexts found")
+            interactive.info("Please configure kubectl with at least one cluster context")
             return False
         
         logger.info("✅ All required dependencies are available")
@@ -695,7 +698,7 @@ class K8sResourceCopyTool:
         contexts = self.kubectl.get_contexts()
         current_context = self.kubectl.get_current_context()
         
-        print(f"\n{Fore.CYAN}=== Source Selection ==={Style.RESET_ALL}")
+        interactive.section("Source Selection")
         
         # Select source context
         source_context = self.selector.select_context(contexts, current_context)
@@ -716,7 +719,7 @@ class K8sResourceCopyTool:
         """Get target cluster context and namespace"""
         contexts = self.kubectl.get_contexts()
         
-        print(f"\n{Fore.CYAN}=== Target Selection ==={Style.RESET_ALL}")
+        interactive.section("Target Selection")
         
         # Select target context
         target_context = self.selector.select_context(contexts)
@@ -740,31 +743,31 @@ class K8sResourceCopyTool:
     
     def discover_and_select_resources(self, namespace: str) -> List[K8sResource]:
         """Discover and select resources for copying"""
-        print(f"\n{Fore.CYAN}🔍 Discovering resources in namespace: {namespace}{Style.RESET_ALL}")
+        interactive.operation_start("Resource Discovery", f"namespace: {namespace}")
         
         resources = self.discoverer.discover_resources(self.resource_types, namespace)
         
         if not resources:
-            print(f"{Fore.YELLOW}⚠️ No resources found in namespace: {namespace}{Style.RESET_ALL}")
+            interactive.warning_msg(f"No resources found in namespace: {namespace}")
             return []
         
         logger.info(f"Found {len(resources)} resources with relationships")
         
         # Display discovery summary
-        print(f"\n{Fore.GREEN}Discovery Summary:{Style.RESET_ALL}")
+        interactive.subsection("Discovery Summary")
         resource_counts = {}
         for resource in resources:
             kind = resource.kind.lower()
             resource_counts[kind] = resource_counts.get(kind, 0) + 1
         
         for kind, count in sorted(resource_counts.items()):
-            print(f"  {kind}: {count}")
+            interactive.info(f"  {kind}: {count}")
         
         return self.selector.select_resources(resources)
     
     def export_resources(self, resources: List[K8sResource], source_context: str, target_namespace: str = None) -> Dict[str, str]:
         """Export selected resources to temporary files"""
-        print(f"\n{Fore.CYAN}📦 Exporting resources...{Style.RESET_ALL}")
+        interactive.operation_start("Resource Export")
         
         # Ensure we're in the correct context
         if not self.kubectl.switch_context(source_context):
@@ -791,58 +794,53 @@ class K8sResourceCopyTool:
                 target_namespace
             ):
                 exported_files[resource.full_identifier] = filepath
-                print(f"  ✅ {resource.full_identifier}")
+                interactive.success(f"{resource.full_identifier}")
                 if target_namespace and target_namespace != resource.namespace:
-                    print(f"    🔄 Namespace updated: {resource.namespace} → {target_namespace}")
+                    interactive.info(f"    Namespace updated: {resource.namespace} → {target_namespace}")
             else:
-                print(f"  ❌ Failed to export {resource.full_identifier}")
+                interactive.failure(f"Failed to export {resource.full_identifier}")
         
         logger.info(f"Exported {len(exported_files)} resources to {export_dir}")
         return exported_files
     
     def preview_changes(self, exported_files: Dict[str, str], target_namespace: str) -> bool:
         """Preview changes that will be applied"""
-        print(f"\n{Fore.CYAN}👁️ Resource Preview:{Style.RESET_ALL}")
-        print("=" * 60)
+        interactive.subsection("Resource Preview")
         
         for identifier, filepath in exported_files.items():
-            print(f"\n{Fore.YELLOW}Resource: {identifier}{Style.RESET_ALL}")
-            print(f"File: {filepath}")
-            print(f"Target: {target_namespace}")
+            interactive.info(f"\nResource: {identifier}")
+            interactive.info(f"File: {filepath}")
+            interactive.info(f"Target: {target_namespace}")
             
             # Show first few lines of the resource
             try:
                 with open(filepath, 'r') as f:
                     lines = f.readlines()[:10]
                     for line in lines:
-                        print(f"  {line.rstrip()}")
+                        interactive.info(f"  {line.rstrip()}")
                     if len(lines) >= 10:
-                        print("  ...")
+                        interactive.info("  ...")
             except Exception as e:
-                print(f"  Error reading file: {e}")
-        
-        print("=" * 60)
+                interactive.warning_msg(f"Error reading file: {e}")
         return True
     
     def confirm_operation(self, resources: List[K8sResource], source_context: str, 
                          source_namespace: str, target_context: str, target_namespace: str) -> bool:
         """Get user confirmation for the copy operation"""
-        print(f"\n{Fore.RED}⚠️ CONFIRMATION REQUIRED ⚠️{Style.RESET_ALL}")
-        print("=" * 50)
-        print(f"Source: {source_context}/{source_namespace}")
-        print(f"Target: {target_context}/{target_namespace}")
-        print(f"Resources to copy: {len(resources)}")
+        interactive.warning_msg("CONFIRMATION REQUIRED")
+        interactive.info(f"Source: {source_context}/{source_namespace}")
+        interactive.info(f"Target: {target_context}/{target_namespace}")
+        interactive.info(f"Resources to copy: {len(resources)}")
         
-        print(f"\n{Fore.YELLOW}Resources:{Style.RESET_ALL}")
+        interactive.info("\nResources:")
         for resource in resources:
-            print(f"  • {resource.full_identifier}")
+            interactive.info(f"  • {resource.full_identifier}")
         
-        print("=" * 50)
-        print(f"{Fore.RED}This operation will apply resources to the target cluster.{Style.RESET_ALL}")
-        print(f"{Fore.RED}Existing resources with the same name may be modified.{Style.RESET_ALL}")
+        interactive.warning_msg("This operation will apply resources to the target cluster.")
+        interactive.warning_msg("Existing resources with the same name may be modified.")
         
-        confirmation = get_user_input(
-            f"\n{Fore.YELLOW}Type 'YES' to confirm this operation{Style.RESET_ALL}",
+        confirmation = interactive.get_input(
+            "Type 'YES' to confirm this operation",
             validator=lambda x: x == 'YES'
         )
         
@@ -857,7 +855,7 @@ class K8sResourceCopyTool:
             return False
         
         mode = "dry-run" if dry_run else "apply"
-        print(f"\n{Fore.CYAN}🚀 {mode.title()} resources to {target_context}/{target_namespace}...{Style.RESET_ALL}")
+        interactive.operation_start(f"{mode.title()} resources", f"target: {target_context}/{target_namespace}")
         
         success_count = 0
         total_count = len(exported_files)
@@ -867,21 +865,17 @@ class K8sResourceCopyTool:
             
             if self.kubectl.apply_resource(filepath, None, dry_run):
                 success_count += 1
-                print(f"  ✅ {identifier}")
+                interactive.success(f"{identifier}")
             else:
-                print(f"  ❌ Failed to apply {identifier}")
+                interactive.failure(f"Failed to apply {identifier}")
         
-        print(f"\n{Fore.GREEN}Results: {success_count}/{total_count} resources processed successfully{Style.RESET_ALL}")
+        interactive.info(f"\nResults: {success_count}/{total_count} resources processed successfully")
         
         if dry_run and success_count > 0:
-            print(f"{Fore.YELLOW}This was a dry-run. No changes were applied.{Style.RESET_ALL}")
-            apply_for_real = get_user_input(
-                "Apply resources for real? (y/N)",
-                default="n",
-                validator=lambda x: x.lower() in ['y', 'yes', 'n', 'no']
-            )
+            interactive.info("This was a dry-run. No changes were applied.")
+            apply_for_real = interactive.confirm("Apply resources for real?", default=False)
             
-            if apply_for_real.lower() in ['y', 'yes']:
+            if apply_for_real:
                 return self.apply_resources(exported_files, target_context, target_namespace, dry_run=False)
         
         return success_count == total_count
@@ -902,8 +896,7 @@ class K8sResourceCopyTool:
     def run(self):
         """Main tool execution"""
         try:
-            print(f"{Fore.CYAN}🚀 {self.tool_name}{Style.RESET_ALL}")
-            print("=" * 60)
+            interactive.section(self.tool_name)
             
             # Check dependencies
             if not self.check_dependencies():
@@ -952,17 +945,17 @@ class K8sResourceCopyTool:
             
             if success:
                 logger.info("✅ Resource copy operation completed successfully")
-                print(f"\n{Fore.GREEN}🎉 Operation completed successfully!{Style.RESET_ALL}")
+                interactive.success("Operation completed successfully!")
             else:
                 logger.error("❌ Resource copy operation completed with errors")
-                print(f"\n{Fore.RED}❌ Operation completed with errors{Style.RESET_ALL}")
+                interactive.failure("Operation completed with errors")
             
         except KeyboardInterrupt:
             logger.info("❌ Operation cancelled by user")
-            print(f"\n{Fore.YELLOW}Operation cancelled by user{Style.RESET_ALL}")
+            interactive.user_cancelled()
         except Exception as e:
             logger.error(f"❌ Unexpected error: {e}")
-            print(f"\n{Fore.RED}❌ Unexpected error: {e}{Style.RESET_ALL}")
+            interactive.failure(f"Unexpected error: {e}")
             sys.exit(1)
         finally:
             # Cleanup temporary files

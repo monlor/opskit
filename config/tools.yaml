@@ -35,6 +35,12 @@ tools:
       description: Copy Kubernetes resources between clusters and namespaces with automatic relationship detection and kubectl neat integration
       keywords: [kubernetes, k8s, resource, copy, migration, cluster, namespace, kubectl]
       dependencies: [kubectl, krew]  # kubectl 必需，krew 可选但推荐
+      
+    k8s-export:
+      version: "1.0.0"
+      description: Export Kubernetes resources from specified namespaces with multi-namespace selection and kubectl neat cleaning
+      keywords: [kubernetes, k8s, resource, export, backup, namespace, kubectl, yaml]
+      dependencies: [kubectl, krew]  # kubectl 必需，krew 可选但推荐
 
   storage:
     s3-sync:

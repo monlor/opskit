@@ -562,6 +562,10 @@ class OpsKitCLI:
             env_vars['OPSKIT_TOOL_TEMP_DIR'] = tool_temp_dir
             env_vars['OPSKIT_BASE_PATH'] = str(self.opskit_root)
             
+            # Inject user's working directory (where opskit command was executed)
+            # This allows tools to know the user's actual working directory, not the tool's directory
+            env_vars['OPSKIT_WORKING_DIR'] = os.getcwd()
+            
             # Inject tool metadata for shell tools
             env_vars['TOOL_NAME'] = found_tool.get('display_name', found_tool['name'])
             env_vars['TOOL_VERSION'] = tool_version

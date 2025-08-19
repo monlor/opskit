@@ -563,9 +563,11 @@ select_multiple_from_list() {
     
     if use_colors; then
         echo "${BLUE}Enter numbers separated by spaces (e.g., '1 3 5') or comma (e.g., '1,3,5')${RESET}" >&2
+        echo "${BLUE}Type 'all' or '*' to select all items${RESET}" >&2
         echo "${BLUE}Press Enter without input to finish selection${RESET}" >&2
     else
         echo "Enter numbers separated by spaces (e.g., '1 3 5') or comma (e.g., '1,3,5')" >&2
+        echo "Type 'all' or '*' to select all items" >&2
         echo "Press Enter without input to finish selection" >&2
     fi
     
@@ -591,6 +593,18 @@ select_multiple_from_list() {
         if [[ "$selection_lower" == "cancel" || "$selection_lower" == "c" || "$selection_lower" == "quit" || "$selection_lower" == "q" ]]; then
             info "User cancelled multiple selection from: $title"
             return 1
+        fi
+        
+        # Check for "select all" commands
+        if [[ "$selection_lower" == "all" || "$selection_lower" == "*" ]]; then
+            local all_indices=()
+            for ((i=0; i<${#items[@]}; i++)); do
+                all_indices+=("$i")
+            done
+            
+            info "User selected ALL ${#items[@]} options: ${items[*]}"
+            echo "${all_indices[*]}"
+            return 0
         fi
         
         # Parse selections (handle both comma and space separated)

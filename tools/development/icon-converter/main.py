@@ -278,58 +278,126 @@ class IconConverter:
         return confirm("Proceed with generation?")
     
     def resize_image(self, source_image: Image.Image, target_size: int) -> Image.Image:
-        """Resize image with high quality"""
-        # Use high-quality resampling
-        resample = Image.Resampling.LANCZOS
-        
-        if self.keep_aspect_ratio:
-            # Resize maintaining aspect ratio
-            source_image.thumbnail((target_size, target_size), resample)
+        """Resize image with high quality using safer approach"""
+        try:
+            # Always create a fresh copy to avoid any reference issues
+            source_copy = source_image.copy()
             
-            # Create new image with target size and paste centered
-            new_image = Image.new('RGBA', (target_size, target_size), (255, 255, 255, 0))
-            x = (target_size - source_image.width) // 2
-            y = (target_size - source_image.height) // 2
-            new_image.paste(source_image, (x, y), source_image if source_image.mode == 'RGBA' else None)
-            return new_image
-        else:
-            # Direct resize
-            resized = source_image.resize((target_size, target_size), resample)
+            # Ensure RGBA mode for consistent processing
+            if source_copy.mode != 'RGBA':
+                source_copy = source_copy.convert('RGBA')
             
-            # Enhance small icons
-            if target_size <= 32 and self.quality == 'high':
-                enhancer = ImageEnhance.Sharpness(resized)
-                resized = enhancer.enhance(1.2)
+            # Calculate resize dimensions
+            original_width, original_height = source_copy.size
             
-            return resized
+            if self.keep_aspect_ratio:
+                # Calculate scaling factor to fit within target size
+                scale = min(target_size / original_width, target_size / original_height)
+                new_width = int(original_width * scale)
+                new_height = int(original_height * scale)
+                
+                # Use resize instead of thumbnail for more control
+                resized = source_copy.resize((new_width, new_height), Image.Resampling.LANCZOS)
+                
+                # Create new image with target size and transparent background
+                final_image = Image.new('RGBA', (target_size, target_size), (0, 0, 0, 0))
+                
+                # Center the resized image
+                x = (target_size - new_width) // 2
+                y = (target_size - new_height) // 2
+                final_image.paste(resized, (x, y), resized)
+                
+                return final_image
+            else:
+                # Direct resize to exact dimensions
+                resized = source_copy.resize((target_size, target_size), Image.Resampling.LANCZOS)
+                
+                # Apply sharpening for small icons if requested
+                if target_size <= 32 and self.quality == 'high':
+                    try:
+                        enhancer = ImageEnhance.Sharpness(resized)
+                        resized = enhancer.enhance(1.1)  # Reduced enhancement factor
+                    except Exception as e:
+                        logger.debug(f"Sharpening failed for {target_size}px: {e}")
+                        # Continue without sharpening if it fails
+                
+                return resized
+                
+        except Exception as e:
+            logger.error(f"Error in resize_image for size {target_size}: {e}")
+            # Return a basic resized image as fallback
+            try:
+                fallback = source_image.resize((target_size, target_size), Image.Resampling.NEAREST)
+                if fallback.mode != 'RGBA':
+                    fallback = fallback.convert('RGBA')
+                return fallback
+            except Exception as fallback_error:
+                logger.error(f"Fallback resize also failed: {fallback_error}")
+                return None
     
     def generate_icon(self, source_image: Image.Image, file_config: Dict, platform_dir: str) -> bool:
         """Generate single icon file"""
+        filename = file_config.get('name', 'unknown')
         try:
             target_size = file_config['size']
-            filename = file_config['name']
             format_type = file_config.get('format', 'png')
-            
-            # Resize image
-            resized_image = self.resize_image(source_image, target_size)
-            
-            # Handle different formats
             output_path = os.path.join(platform_dir, filename)
             
-            if format_type.lower() == 'ico':
-                # ICO format for favicons
-                resized_image.save(output_path, format='ICO', sizes=[(target_size, target_size)])
-            else:
-                # PNG format
-                if resized_image.mode != 'RGBA':
-                    resized_image = resized_image.convert('RGBA')
-                resized_image.save(output_path, format='PNG', optimize=True)
+            # Resize image (this creates a copy internally to avoid threading issues)
+            resized_image = self.resize_image(source_image, target_size)
             
-            logger.debug(f"Generated: {filename} ({target_size}x{target_size})")
-            return True
+            # Validate resized image
+            if resized_image is None:
+                logger.error(f"Failed to resize image for {filename}")
+                return False
+            
+            # Handle different formats with safer saving approach
+            if format_type.lower() == 'ico':
+                # ICO format for favicons - convert to RGB first for ICO compatibility
+                try:
+                    ico_image = resized_image.convert('RGB')
+                    ico_image.save(output_path, format='ICO', sizes=[(target_size, target_size)])
+                except Exception as ico_error:
+                    logger.warning(f"ICO save failed for {filename}, trying PNG fallback: {ico_error}")
+                    # Fallback to PNG if ICO fails
+                    png_path = output_path.replace('.ico', '.png')
+                    resized_image.save(png_path, format='PNG')
+            else:
+                # PNG format with enhanced safety measures
+                try:
+                    # Ensure consistent RGBA mode
+                    if resized_image.mode != 'RGBA':
+                        resized_image = resized_image.convert('RGBA')
+                    
+                    # Create a completely new image to avoid any reference issues
+                    clean_image = Image.new('RGBA', resized_image.size, (0, 0, 0, 0))
+                    clean_image.paste(resized_image, (0, 0), resized_image)
+                    
+                    # Save with basic PNG parameters (avoid optimization that might cause issues)
+                    clean_image.save(output_path, format='PNG')
+                    
+                except Exception as png_error:
+                    logger.warning(f"Enhanced PNG save failed for {filename}, trying basic save: {png_error}")
+                    # Fallback to most basic PNG save
+                    try:
+                        basic_image = resized_image.convert('RGB')
+                        basic_image.save(output_path, format='PNG')
+                    except Exception as basic_error:
+                        logger.error(f"All PNG save methods failed for {filename}: {basic_error}")
+                        return False
+            
+            # Verify the generated file
+            if os.path.exists(output_path) and os.path.getsize(output_path) > 0:
+                logger.debug(f"✅ Generated: {filename} ({target_size}x{target_size})")
+                return True
+            else:
+                logger.error(f"❌ Generated file is empty or missing: {filename}")
+                return False
             
         except Exception as e:
-            logger.error(f"Failed to generate {filename}: {e}")
+            logger.error(f"❌ Failed to generate {filename}: {e}")
+            import traceback
+            logger.debug(f"Full traceback for {filename}: {traceback.format_exc()}")
             return False
     
     def generate_platform_readme(self, platform: str, platform_dir: str):
@@ -461,17 +529,13 @@ Each icon maintains the original aspect ratio and quality.
         success_count = 0
         total_count = len(config['files'])
         
-        # Use ThreadPoolExecutor for parallel processing
-        with concurrent.futures.ThreadPoolExecutor(max_workers=self.threads) as executor:
-            futures = []
-            
-            for file_config in config['files']:
-                future = executor.submit(self.generate_icon, source_image, file_config, platform_dir)
-                futures.append(future)
-            
-            for future in concurrent.futures.as_completed(futures):
-                if future.result():
-                    success_count += 1
+        # Use sequential processing to avoid any threading issues
+        for file_config in config['files']:
+            logger.debug(f"Generating {file_config['name']} ({file_config['size']}px)...")
+            if self.generate_icon(source_image, file_config, platform_dir):
+                success_count += 1
+            else:
+                logger.warning(f"Failed to generate {file_config['name']}")
         
         # Generate README
         self.generate_platform_readme(platform, platform_dir)

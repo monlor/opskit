@@ -412,6 +412,8 @@ class Interactive:
             self.logger.info(f"{i:2d}. {item}")
         
         self.logger.info("Enter numbers separated by spaces (e.g., '1 3 5') or comma (e.g., '1,3,5')")
+        self.logger.info("Use ranges (e.g., '1-3' for items 1,2,3) or combine (e.g., '1-3,5,7-9')")
+        self.logger.info("Type 'all' or '*' to select all items")
         self.logger.info("Press Enter without input to finish selection")
         
         while True:
@@ -422,13 +424,41 @@ class Interactive:
                     self.info(f"User finished selection from: {title}")
                     return []
                 
+                # Check for "select all" commands
+                if response.lower() in ['all', '*']:
+                    all_selections = list(range(len(items)))
+                    selected_items = [items[i] for i in all_selections]
+                    self.info(f"User selected ALL {len(items)} options: {selected_items}")
+                    return all_selections
+                
                 try:
+                    # Parse selections supporting ranges and multiple formats
+                    selections = []
+                    
+                    # Split by comma first, then by spaces
+                    parts = []
                     if ',' in response:
-                        # Comma-separated format
-                        selections = [int(x.strip()) for x in response.split(',') if x.strip()]
+                        parts = [x.strip() for x in response.split(',') if x.strip()]
                     else:
-                        # Space-separated format  
-                        selections = [int(x.strip()) for x in response.split() if x.strip()]
+                        parts = [x.strip() for x in response.split() if x.strip()]
+                    
+                    for part in parts:
+                        if '-' in part and part.count('-') == 1:
+                            # Range format (e.g., "1-3")
+                            try:
+                                start_str, end_str = part.split('-')
+                                start = int(start_str.strip())
+                                end = int(end_str.strip())
+                                if start <= end:
+                                    selections.extend(range(start, end + 1))
+                                else:
+                                    selections.extend(range(start, end - 1, -1))
+                            except ValueError:
+                                # Invalid range, treat as single number
+                                selections.append(int(part))
+                        else:
+                            # Single number
+                            selections.append(int(part))
                     
                     # Validate all selections
                     valid_selections = []

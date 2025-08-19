@@ -399,6 +399,73 @@ class Interactive:
                 self.info(f"User cancelled selection from: {title}")
                 return None
     
+    def select_multiple_from_list(self, items: List, title: str = "Select multiple options", **kwargs):
+        """Interactive multiple selection from list with logging"""
+        self.info(f"Multiple selection requested: {title} ({len(items)} items)")
+        
+        if not items:
+            self.logger.warning("No items to select from")
+            return []
+        
+        self.logger.info(f"=== {title} ===")
+        for i, item in enumerate(items, 1):
+            self.logger.info(f"{i:2d}. {item}")
+        
+        self.logger.info("Enter numbers separated by spaces (e.g., '1 3 5') or comma (e.g., '1,3,5')")
+        self.logger.info("Press Enter without input to finish selection")
+        
+        while True:
+            try:
+                response = input("Your choices: ").strip()
+                
+                if not response:
+                    self.info(f"User finished selection from: {title}")
+                    return []
+                
+                try:
+                    if ',' in response:
+                        # Comma-separated format
+                        selections = [int(x.strip()) for x in response.split(',') if x.strip()]
+                    else:
+                        # Space-separated format  
+                        selections = [int(x.strip()) for x in response.split() if x.strip()]
+                    
+                    # Validate all selections
+                    valid_selections = []
+                    invalid_selections = []
+                    
+                    for selection in selections:
+                        if 1 <= selection <= len(items):
+                            valid_selections.append(selection - 1)
+                        else:
+                            invalid_selections.append(selection)
+                    
+                    if invalid_selections:
+                        self.logger.warning(f"Invalid selections: {invalid_selections}. Please enter numbers between 1 and {len(items)}")
+                        continue
+                    
+                    if valid_selections:
+                        # Remove duplicates while preserving order
+                        unique_selections = []
+                        seen = set()
+                        for sel in valid_selections:
+                            if sel not in seen:
+                                unique_selections.append(sel)
+                                seen.add(sel)
+                        
+                        selected_items = [items[i] for i in unique_selections]
+                        self.info(f"User selected {len(unique_selections)} options: {selected_items}")
+                        return unique_selections
+                    else:
+                        self.logger.warning("No valid selections provided")
+                        
+                except ValueError:
+                    self.logger.warning("Please enter valid numbers separated by spaces or commas")
+                    
+            except KeyboardInterrupt:
+                self.info(f"User cancelled multiple selection from: {title}")
+                return []
+    
     # Loading and progress methods
     def loading_spinner(self, message: str = "Processing") -> LoadingSpinner:
         """Create a loading spinner for long-running operations"""
@@ -462,6 +529,11 @@ def select_from_list(items: List, title: str = "Select an option", **kwargs):
     """Interactive list selection"""
     temp_logger = Interactive("interactive")
     return temp_logger.select_from_list(items, title, **kwargs)
+
+def select_multiple_from_list(items: List, title: str = "Select multiple options", **kwargs):
+    """Interactive multiple selection from list"""
+    temp_logger = Interactive("interactive")
+    return temp_logger.select_multiple_from_list(items, title, **kwargs)
 
 def loading_spinner(message: str = "Processing") -> LoadingSpinner:
     """Create a loading spinner for long-running operations"""

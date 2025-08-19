@@ -522,6 +522,148 @@ select_from_list() {
     done
 }
 
+# Function: select_multiple_from_list
+# Display a selection list and get multiple user choices
+# Args:
+#   $1: title - Title for the selection
+#   $@: items - List of items to select from
+# Returns: Selected indices (0-based) separated by spaces via stdout, or exits on cancel
+select_multiple_from_list() {
+    local title="$1"
+    shift
+    local items=("$@")
+    local selection=""
+    local i
+    
+    info "Multiple selection requested: $title (${#items[@]} items)"
+    
+    if [[ ${#items[@]} -eq 0 ]]; then
+        warning "No items to select from"
+        return 1
+    fi
+    
+    # Display title
+    if use_colors; then
+        echo "" >&2
+        echo "${CYAN}=== ${title} ===${RESET}" >&2
+    else
+        echo "" >&2
+        echo "=== ${title} ===" >&2
+    fi
+    
+    # Display numbered options
+    for i in "${!items[@]}"; do
+        if use_colors; then
+            printf "${YELLOW}%2d${RESET}. %s\n" $((i + 1)) "${items[i]}" >&2
+        else
+            printf "%2d. %s\n" $((i + 1)) "${items[i]}" >&2
+        fi
+    done
+    echo "" >&2
+    
+    if use_colors; then
+        echo "${BLUE}Enter numbers separated by spaces (e.g., '1 3 5') or comma (e.g., '1,3,5')${RESET}" >&2
+        echo "${BLUE}Press Enter without input to finish selection${RESET}" >&2
+    else
+        echo "Enter numbers separated by spaces (e.g., '1 3 5') or comma (e.g., '1,3,5')" >&2
+        echo "Press Enter without input to finish selection" >&2
+    fi
+    
+    while true; do
+        printf "Your choices: " >&2
+        read -r selection
+        
+        # Handle Ctrl+C
+        if [[ $? -ne 0 ]]; then
+            echo "" >&2
+            info "User cancelled multiple selection from: $title"
+            return 1
+        fi
+        
+        # Handle empty input (finish selection)
+        if [[ -z "$selection" ]]; then
+            info "User finished selection from: $title"
+            return 1
+        fi
+        
+        # Handle cancel
+        local selection_lower=$(echo "$selection" | tr '[:upper:]' '[:lower:]')
+        if [[ "$selection_lower" == "cancel" || "$selection_lower" == "c" || "$selection_lower" == "quit" || "$selection_lower" == "q" ]]; then
+            info "User cancelled multiple selection from: $title"
+            return 1
+        fi
+        
+        # Parse selections (handle both comma and space separated)
+        local selections=()
+        if [[ "$selection" =~ , ]]; then
+            # Comma-separated format
+            IFS=',' read -ra raw_selections <<< "$selection"
+        else
+            # Space-separated format
+            IFS=' ' read -ra raw_selections <<< "$selection"
+        fi
+        
+        # Validate and collect valid selections
+        local valid_indices=()
+        local invalid_selections=()
+        local has_invalid=false
+        
+        for sel in "${raw_selections[@]}"; do
+            # Trim whitespace
+            sel=$(echo "$sel" | tr -d ' ')
+            
+            if [[ "$sel" =~ ^[0-9]+$ ]]; then
+                local index=$((sel - 1))
+                if [[ $index -ge 0 && $index -lt ${#items[@]} ]]; then
+                    # Check for duplicates
+                    local is_duplicate=false
+                    for existing in "${valid_indices[@]}"; do
+                        if [[ $existing -eq $index ]]; then
+                            is_duplicate=true
+                            break
+                        fi
+                    done
+                    
+                    if [[ "$is_duplicate" == false ]]; then
+                        valid_indices+=("$index")
+                    fi
+                else
+                    invalid_selections+=("$sel")
+                    has_invalid=true
+                fi
+            elif [[ -n "$sel" ]]; then
+                invalid_selections+=("$sel")
+                has_invalid=true
+            fi
+        done
+        
+        # Show error for invalid selections
+        if [[ "$has_invalid" == true ]]; then
+            if use_colors; then
+                echo "${RED}Invalid selections: ${invalid_selections[*]}. Please enter numbers between 1 and ${#items[@]}${RESET}" >&2
+            else
+                echo "Invalid selections: ${invalid_selections[*]}. Please enter numbers between 1 and ${#items[@]}" >&2
+            fi
+            continue
+        fi
+        
+        # Return valid selections
+        if [[ ${#valid_indices[@]} -gt 0 ]]; then
+            # Create selected items array for logging
+            local selected_items=()
+            for idx in "${valid_indices[@]}"; do
+                selected_items+=("${items[$idx]}")
+            done
+            
+            info "User selected ${#valid_indices[@]} options: ${selected_items[*]}"
+            echo "${valid_indices[*]}"
+            return 0
+        else
+            warning "No valid selections provided"
+        fi
+    done
+}
+
 # Validation helper functions
 # These can be used with get_input as validator functions
 

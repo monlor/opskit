@@ -110,6 +110,16 @@ sys.path.insert(0, os.path.join(os.environ['OPSKIT_BASE_PATH'], 'common/python')
 from logger import get_logger
 ```
 
+**5. 不要使用 print() 或 console.print()**
+```python
+# ❌ 错误 - 不要使用 print 或第三方库的打印函数
+print("Hello world")
+console.print("Hello world")
+
+# ✅ 正确 - 使用 OpsKit 的日志系统
+logger.info("Hello world")
+```
+
 
 ## 公共库集成
 
@@ -331,6 +341,48 @@ if __name__ == '__main__':
 - 配置选项说明
 - 组件对比表
 
+## 工具注册
+
+### 添加到 config/tools.yaml
+
+开发完成后，必须将工具信息添加到 `config/tools.yaml` 文件中，包括：
+
+**1. 工具定义**
+```yaml
+tools:
+  category:
+    tool-name:
+      version: "1.0.0"
+      description: "工具描述"
+      keywords: [关键词, 列表]
+      dependencies: [依赖列表]  # 可选，引用 dependencies.yaml
+```
+
+**2. 类别定义（如果是新类别）**
+```yaml
+categories:
+  category:
+    name: "类别名称"
+    description: "类别描述"
+    icon: 🛠️
+```
+
+**示例**：
+```yaml
+tools:
+  development:
+    icon-converter:
+      version: "1.0.0"
+      description: Convert single icon files to multiple sizes and formats for Web, iOS, Android, and Chrome extension development
+      keywords: [icon, convert, resize, web, ios, android, chrome, favicon, app-icon, development]
+
+categories:
+  development:
+    name: Development Tools
+    description: Software development utilities, converters, and workflow automation tools
+    icon: 🛠️
+```
+
 ## 总结
 
 ### OpsKit Python 工具开发核心要点
@@ -342,9 +394,16 @@ if __name__ == '__main__':
 - 不要定义工具版本号（由框架管理）
 - 不要在工具中自动加载 .env 文件
 - 使用 OpsKit 的日志和存储系统
+- 开发完成后添加工具信息到 `config/tools.yaml`
 
 **文件结构**：
 - `CLAUDE.md`（必需）
 - `main.py`（必需）
 - `requirements.txt`（必需）
 - `.env`（可选配置）
+
+**注册流程**：
+1. 完成工具开发和测试
+2. 在 `config/tools.yaml` 中添加工具定义
+3. 如果是新类别，添加类别定义
+4. 测试工具在 OpsKit 框架中的集成

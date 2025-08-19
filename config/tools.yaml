@@ -49,6 +49,13 @@ tools:
       keywords: [s3, aws, storage, sync, backup, cloud-storage, file-sync]
       dependencies: [boto3, aws-cli]
 
+  development:
+    icon-converter:
+      version: "1.0.0"
+      description: Convert single icon files to multiple sizes and formats for Web, iOS, Android, and Chrome extension development
+      keywords: [icon, convert, resize, web, ios, android, chrome, favicon, app-icon, development]
+      # 无额外系统依赖，使用 Python Pillow 库
+
 # 工具类别定义
 categories:
   database:
@@ -80,6 +87,11 @@ categories:
     name: Storage Tools
     description: Storage management, backup, synchronization and data transfer tools
     icon: 💾
+    
+  development:
+    name: Development Tools
+    description: Software development utilities, converters, and workflow automation tools
+    icon: 🛠️
 
 # 全局配置
 global:

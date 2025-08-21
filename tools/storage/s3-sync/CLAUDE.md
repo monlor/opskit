@@ -1,305 +1,278 @@
 # S3 Sync Tool
 
-## Description
-A comprehensive Amazon S3 synchronization tool that provides intelligent, bidirectional file synchronization between local directories and S3 buckets. Features AWS credential management, multi-profile support, intelligent conflict resolution, and batch operations with detailed progress tracking.
+## 功能描述
+S3 Sync Tool 是一个高性能的 S3 存储桶同步工具，支持在不同的 AWS 环境之间同步 S3 存储桶。该工具具有并行处理、连接缓存、重试机制和交互式操作界面等高级功能。
 
-## Technical Architecture
-- **Implementation Language**: Python 3.7+
-- **Core Dependencies**: boto3, botocore, colorama, click
-- **System Requirements**: AWS CLI (optional but recommended for credential management)
-- **AWS Support**: All AWS regions, S3 compatible services (MinIO, DigitalOcean Spaces)
-- **Authentication**: AWS credentials chain (environment, profile, IAM roles, EC2 instance profiles)
+### 核心特性
+- **多环境支持**: 支持 AWS 标准环境和自定义 S3 兼容服务
+- **并行同步**: 使用多线程技术提高同步效率
+- **连接管理**: 支持连接配置的缓存和复用
+- **智能重试**: 自动重试失败的对象传输
+- **交互界面**: 基于 OpsKit 交互式组件的用户友好界面
+- **安全存储**: 连接凭证采用 Base64 编码存储
+- **权限友好**: 连接测试不需要 ListAllMyBuckets 权限
+- **手动输入**: 支持在无法列出存储桶时手动输入存储桶名称
 
-## Key Features
-- **Bidirectional Sync**: Upload (local→S3), download (S3→local), and two-way synchronization
-- **AWS Profile Management**: Interactive AWS profile selection and credential validation
-- **Connection Information Caching**: Store and manage S3 connections like mysql-sync tool
-- **Connection Management Interface**: Interactive UI for connection CRUD operations
-- **S3-Compatible Services**: Support for MinIO, DigitalOcean Spaces via endpoint_url
-- **Intelligent Conflict Resolution**: Size, timestamp, and ETag-based comparison
-- **Batch Operations**: Process multiple files with progress tracking and parallel uploads
-- **Resume Capability**: Resume interrupted transfers using multipart uploads
-- **Exclusion Patterns**: Support .gitignore-style patterns for selective sync
-- **Dry Run Mode**: Preview operations without making changes
-- **Encryption Support**: Server-side encryption with KMS and customer keys
-- **Storage Class Selection**: Intelligent storage class assignment (Standard, IA, Glacier)
-- **Connection Caching**: Reuse AWS sessions and connections for performance
-- **Comprehensive Logging**: Detailed operation logs with configurable verbosity
+## 技术架构
+- **实现语言**: Python 3.7+
+- **核心依赖**: boto3, botocore
+- **系统要求**: 无特殊系统依赖
+- **OpsKit 集成**: 完整集成 OpsKit 框架的日志、存储和交互式组件
 
-## Configuration Schema
-```yaml
-# AWS settings
-aws:
-  default_profile: default
-  default_region: us-east-1
-  session_cache: true
-  max_retries: 3
-  timeout: 300
-  
-# Sync settings
-sync:
-  default_direction: upload
-  delete_removed: false
-  preserve_timestamps: true
-  verify_checksums: true
-  parallel_uploads: 4
-  multipart_threshold: 64MB
-  multipart_chunksize: 8MB
-  
-# Storage settings
-storage:
-  default_storage_class: STANDARD
-  lifecycle_management: true
-  encryption_enabled: true
-  default_encryption: AES256
-  
-# Performance settings
-performance:
-  connection_pool_size: 10
-  max_bandwidth: 0  # 0 = unlimited
-  retry_backoff_factor: 2
-  progress_update_interval: 1.0
-  
-# Exclusion patterns
-exclusions:
-  default_patterns:
-    - "*.tmp"
-    - "*.log"
-    - ".DS_Store"
-    - "Thumbs.db"
-    - ".git/"
-    - "__pycache__/"
-    - "node_modules/"
-```
+## 配置项
 
-## Code Structure
+### 环境变量配置
+工具支持以下环境变量配置：
 
-### Main Components
-- **S3SyncTool Class**: Core synchronization engine with OpsKit integration
-- **AWSProfileManager**: AWS credential and profile management
-- **SyncEngine**: Bidirectional synchronization logic and conflict resolution
-- **FileComparator**: Intelligent file comparison using size, timestamp, and ETag
-- **TransferManager**: Optimized file transfer with multipart uploads and resume
-- **ExclusionManager**: Pattern-based file exclusion using .gitignore syntax
-- **ProgressTracker**: Real-time progress tracking for batch operations
-- **ConflictResolver**: Interactive conflict resolution for file differences
-
-### Key Methods
-- `check_aws_credentials()`: Validate AWS credentials and profile availability
-- `select_aws_profile()`: Interactive AWS profile selection with validation
-- `list_s3_objects()`: Paginated S3 object listing with metadata
-- `compare_files()`: Intelligent local/S3 file comparison
-- `sync_directory()`: Full directory synchronization with exclusion patterns
-- `upload_file()`: Optimized file upload with multipart support
-- `download_file()`: Resumable file download with integrity verification
-- `resolve_conflicts()`: Interactive conflict resolution interface
-- `cleanup_temp_files()`: Clean up temporary files using OPSKIT_TOOL_TEMP_DIR
-
-## Error Handling Strategy
-- **AWS Credential Errors**: Guide users through credential setup and profile configuration
-- **Network Errors**: Automatic retry with exponential backoff for transient failures
-- **Permission Errors**: Clear error messages with suggested IAM policy requirements
-- **Storage Errors**: Handle insufficient storage space and disk access issues
-- **Interrupt Handling**: Clean cancellation with progress preservation and cleanup
-- **Validation Errors**: Comprehensive input validation with helpful error messages
-
-## Security Considerations
-- **Credential Management**: Use AWS credential chain, never store credentials in tool
-- **Encryption Support**: Server-side encryption with KMS and customer-provided keys
-- **Temporary Files**: All temporary files stored in OPSKIT_TOOL_TEMP_DIR
-- **Access Control**: Validate bucket access before operations
-- **Audit Trail**: Comprehensive logging of all operations for security auditing
-- **Secure Transfer**: Use HTTPS for all AWS API communications
-
-## AWS Integration
-
-### Credential Sources (in order of precedence)
-1. **Environment Variables**: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_SESSION_TOKEN
-2. **AWS Credentials File**: ~/.aws/credentials with named profiles
-3. **AWS Config File**: ~/.aws/config for region and other settings
-4. **IAM Instance Profile**: For EC2 instances with attached IAM roles
-5. **ECS Task Roles**: For containerized applications
-6. **AWS SSO**: Single sign-on integration
-
-### IAM Permissions Required
-```json
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Effect": "Allow",
-      "Action": [
-        "s3:ListBucket",
-        "s3:GetBucketLocation",
-        "s3:GetObject",
-        "s3:PutObject",
-        "s3:DeleteObject",
-        "s3:GetObjectVersion",
-        "s3:PutObjectAcl",
-        "s3:GetObjectAcl"
-      ],
-      "Resource": [
-        "arn:aws:s3:::your-bucket",
-        "arn:aws:s3:::your-bucket/*"
-      ]
-    }
-  ]
-}
-```
-
-## Sync Operations
-
-### Upload (Local → S3)
-- Compare local files with S3 objects
-- Upload new and modified files
-- Optional deletion of S3 objects not present locally
-- Preserve file metadata and timestamps
-- Support for custom storage classes
-
-### Download (S3 → Local)
-- Compare S3 objects with local files
-- Download new and modified objects
-- Optional deletion of local files not present in S3
-- Restore file timestamps from S3 metadata
-- Verify file integrity using ETags
-
-### Two-way Sync
-- Bidirectional comparison and synchronization
-- Intelligent conflict resolution for files modified in both locations
-- User interaction for conflict resolution decisions
-- Maintain sync state for incremental updates
-
-## Testing Approach
-- **Unit Tests**: Core functionality, file comparison, and AWS integration
-- **Integration Tests**: End-to-end sync operations with test S3 buckets
-- **Mock Tests**: AWS API interactions using moto library
-- **Performance Tests**: Large file and batch operation performance
-- **Error Scenarios**: Network failures, permission errors, interrupted transfers
-
-## Usage Examples
-
-### Interactive Mode
 ```bash
-opskit s3-sync
-# Interactive workflow:
-# 1. Select AWS profile
-# 2. Choose sync direction (upload/download/bidirectional)
-# 3. Enter local directory path
-# 4. Enter S3 bucket and prefix
-# 5. Configure sync options
-# 6. Review and execute
+# 并发配置
+MAX_WORKERS=10                    # 最大并发工作线程数 (默认: 10)
+
+# 重试配置  
+MAX_RETRIES=5                     # 最大重试次数 (默认: 5)
+RETRY_DELAY=2                     # 重试延迟基数，秒 (默认: 2)
+
+# 功能开关
+CACHE_CONNECTIONS=true            # 是否缓存连接配置 (默认: true)
+CONFIRM_DESTRUCTIVE=true          # 是否确认破坏性操作 (默认: true)
 ```
 
-### Upload Directory to S3
+### 连接配置
+工具支持两种连接方式：
+
+**1. AWS 默认配置**
+- 使用 AWS CLI 或 SDK 的默认凭证链
+- 适用于 IAM 角色、环境变量或共享凭证文件
+
+**2. 自定义连接**
+- 手动输入 AWS Access Key 和 Secret Key
+- 支持自定义区域和 S3 兼容端点
+- 连接配置可保存到临时目录供复用
+
+## 开发指南
+
+### 代码结构说明
+```python
+class S3SyncTool:
+    def __init__(self):
+        # 工具初始化和配置加载
+    
+    def _load_connections(self) -> Dict:
+        # 加载已保存的连接配置
+    
+    def _input_connection_details(self, connection_type: str) -> Dict:
+        # 交互式连接配置输入
+    
+    def _get_s3_client(self, connection_details: Dict) -> boto3.client:
+        # 创建 S3 客户端
+    
+    def list_buckets(self, connection_details: Dict) -> List[str]:
+        # 列出可用的存储桶
+    
+    def _copy_object(self, ...):
+        # 单个对象复制（支持重试）
+    
+    def sync_buckets(self, ...):
+        # 存储桶同步主逻辑（并行处理）
+    
+    def run(self):
+        # 主执行流程
+```
+
+### 关键功能实现
+
+**1. 连接管理**
+- 使用 OpsKit 存储系统缓存连接配置
+- 支持连接验证和自动重连
+- 凭证安全处理（Base64 编码）
+
+**2. 并行同步**
+- 使用 `concurrent.futures.ThreadPoolExecutor` 实现并行上传
+- 可配置的工作线程数量
+- 实时进度跟踪和状态报告
+
+**3. 权限适配和错误处理**
+- 智能连接测试：优先使用 STS，回退到 head_bucket 测试
+- 存储桶列表失败时支持手动输入存储桶名称
+- 指数退避算法的自动重试机制
+- 详细的错误日志记录和优雅的异常处理
+
+**4. OpsKit 集成**
+- 使用 `get_interactive()` 创建交互式日志器
+- 利用 `storage` 模块进行配置持久化  
+- 通过 `get_env_var()` 获取环境配置
+- 集成 OpsKit 的交互式组件系统
+
+### 测试方法
+
+**1. 基本功能测试**
 ```bash
-# Upload local directory to S3 bucket
-Source: /home/user/documents
-Target: s3://my-bucket/documents/
-Direction: Upload (local → S3)
-Exclusions: *.tmp, .git/, __pycache__/
-Storage Class: STANDARD_IA
-Encryption: AES256
+# 运行工具
+opskit run s3-sync
 
-Files to upload: 152
-Total size: 1.2 GB
-Estimated time: 3m 45s
-Proceed? (y/N): y
+# 测试连接
+# 1. 选择创建新连接
+# 2. 输入测试凭证
+# 3. 验证存储桶列表显示
 ```
 
-### Download S3 to Local
+**2. 同步测试**
 ```bash
-# Download S3 objects to local directory
-Source: s3://backup-bucket/project/
-Target: /home/user/restored-project/
-Direction: Download (S3 → local)
-Delete local files not in S3: No
-Verify checksums: Yes
-
-Objects to download: 89
-Total size: 847 MB
-Proceed? (y/N): y
+# 准备测试数据
+# 1. 在源环境创建测试存储桶
+# 2. 上传几个小文件
+# 3. 运行同步测试
+# 4. 验证目标环境文件一致性
 ```
 
-### Bidirectional Sync with Conflict Resolution
+**3. 错误处理测试**  
 ```bash
-# Two-way sync with conflict handling
-Source: /home/user/shared
-Target: s3://team-bucket/shared/
-Direction: Bidirectional
-
-Conflicts detected:
-1. file1.txt - Modified in both locations
-   Local:  2024-01-15 10:30:45 (1.2 KB)
-   S3:     2024-01-15 11:15:20 (1.4 KB)
-   Resolution: (l)ocal, (s)3, (r)ename, (s)kip? s
-
-2. file2.txt - Modified in both locations
-   Local:  2024-01-14 15:22:10 (2.1 KB)  
-   S3:     2024-01-14 14:30:55 (2.0 KB)
-   Resolution: (l)ocal, (s)3, (r)ename, (s)kip? l
-
-Apply resolutions? (y/N): y
+# 测试网络中断恢复
+# 测试无效凭证处理
+# 测试权限不足场景
 ```
 
-### Profile Management
+## 使用示例
+
+### 典型同步场景
+
+**场景1: AWS 到 AWS 同步**
+```
+源环境: AWS Production (us-east-1)
+目标环境: AWS Staging (us-west-2) 
+操作: 同步特定存储桶到备份环境
+```
+
+**场景2: AWS 到 MinIO 同步**
+```
+源环境: AWS S3
+目标环境: 私有云 MinIO 服务
+操作: 数据迁移到私有云存储
+```
+
+**场景3: 跨区域备份**
+```
+源环境: AWS us-east-1
+目标环境: AWS ap-southeast-1
+操作: 灾备数据同步
+```
+
+### 操作流程示例
+
+1. **启动工具**
+   ```bash
+   opskit run s3-sync
+   ```
+
+2. **配置源连接**
+   - 选择已保存连接或创建新连接
+   - 输入 AWS 凭证或使用默认配置
+   - 验证连接并列出存储桶
+
+3. **选择同步存储桶**
+   - 从列表中选择一个或多个存储桶
+   - 支持范围选择和批量选择
+
+4. **配置目标连接**
+   - 配置目标环境连接信息
+   - 验证目标环境访问权限
+
+5. **确认并执行**
+   - 查看同步配置摘要
+   - 确认执行同步操作
+   - 监控同步进度和结果
+
+### 性能优化建议
+
+**并发配置**
 ```bash
-# AWS profile selection
-Available AWS profiles:
-1. default (us-east-1)
-2. development (us-west-2)
-3. production (us-east-1)
-4. personal (eu-west-1)
+# 高带宽环境
+MAX_WORKERS=20
 
-Select profile [1]: 2
-Using profile: development (us-west-2)
-Testing credentials... ✅ Valid
+# 低带宽或不稳定网络
+MAX_WORKERS=5
+MAX_RETRIES=10
 ```
 
-### Dry Run Mode
+**网络优化**
 ```bash
-# Preview changes without executing
-Dry run mode enabled
+# 提高重试延迟以适应网络延迟
+RETRY_DELAY=5
 
-Would upload:
-  + documents/report.pdf (2.1 MB)
-  + images/logo.png (45 KB)
-  + data/export.csv (892 KB)
-
-Would download:
-  - backup/old-config.json (1.2 KB)
-
-Would delete (local):
-  × temp/cache.tmp (5.3 KB)
-
-Total: 3 uploads, 1 download, 1 deletion
-Execute these changes? (y/N): n
+# 对于临时操作禁用连接缓存
+CACHE_CONNECTIONS=false
 ```
 
-## Dependency Management
+## 注意事项
 
-### Required Dependencies
-- **boto3**: AWS SDK for Python (S3 operations)
-- **botocore**: Low-level AWS service access
-- **colorama**: Cross-platform colored terminal output
-- **click**: Command-line interface creation
+### 安全考虑
+1. **凭证保护**: 临时文件中的凭证已进行 Base64 编码
+2. **权限控制**: 确保使用的 AWS 凭证具有适当的 S3 权限
+3. **网络安全**: 在不安全网络环境中谨慎使用自定义端点
 
-### Optional Dependencies
-- **awscli**: AWS CLI for advanced credential management
-- **tqdm**: Enhanced progress bars (falls back to basic progress)
-- **watchdog**: File system event monitoring for real-time sync
+### 性能考虑
+1. **带宽限制**: 根据网络带宽调整并发线程数
+2. **存储成本**: 跨区域传输可能产生额外费用
+3. **文件数量**: 大量小文件的同步效率相对较低
 
-### System Requirements
-- **Python**: 3.7 or higher
-- **AWS CLI**: Optional but recommended for credential management
-- **Network**: Internet connectivity for S3 API access
-- **Disk Space**: Sufficient local storage for downloaded files
+### 操作限制
+1. **目标存储桶**: 目前使用与源存储桶相同的名称
+2. **覆盖策略**: 目标存储桶中同名文件将被覆盖
+3. **删除策略**: 工具不会删除目标存储桶中的额外文件
 
-## Development Notes
-- Uses OpsKit common libraries for logging and storage
-- Integrates with OpsKit configuration management system
-- Follows OpsKit tool development standards and patterns
-- English-only code and comments as per project requirements
-- All temporary files managed through OPSKIT_TOOL_TEMP_DIR
-- Comprehensive error handling with user-friendly messages
-- Support for both interactive and batch operation modes
-- Optimized for performance with connection pooling and parallel transfers
+## 故障排除
+
+### 常见问题
+
+**连接测试失败**
+```
+原因: AWS 凭证无效或网络问题
+解决: 
+1. 检查 Access Key 和 Secret Key 是否正确
+2. 确认网络连接和端点 URL
+3. 工具会自动尝试 STS 和 head_bucket 测试方法
+```
+
+**无法列出存储桶**
+```
+原因: 缺少 ListAllMyBuckets 权限（这是正常的）
+解决: 
+1. 工具会自动提供手动输入选项
+2. 直接输入已知的存储桶名称
+3. 确保对目标存储桶有适当的操作权限
+```
+
+**同步中断**  
+```
+原因: 网络不稳定或服务限流
+解决: 增加重试次数和延迟，减少并发线程数
+```
+
+**存储桶创建失败**
+```
+原因: 目标环境权限不足或存储桶名称冲突
+解决: 确认 CreateBucket 权限，检查存储桶命名规则
+```
+
+### 调试模式
+设置日志级别为 DEBUG 以获取详细信息：
+```bash
+# 在 data/.env 中设置
+OPSKIT_LOGGING_CONSOLE_LEVEL=DEBUG
+```
+
+## 版本历史
+
+### v1.0.0 (当前版本)
+- 基于 OpsKit 框架重构
+- 集成交互式组件系统
+- 支持连接配置缓存
+- 优化错误处理和重试机制
+- 提供完整的环境变量配置支持
+
+## 开发计划
+1. 支持增量同步（仅同步变更文件）
+2. 添加文件过滤和排除功能  
+3. 支持自定义目标存储桶命名
+4. 实现同步进度持久化和断点续传
+5. 添加同步任务计划和自动化功能

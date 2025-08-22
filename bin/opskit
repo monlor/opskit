@@ -113,8 +113,22 @@ def list(category, debug):
         handle_error(e, debug or _debug_mode)
 
 
+def complete_tool_names(ctx, args, incomplete):
+    """Auto-complete tool names for the run command"""
+    try:
+        from core.cli import OpsKitCLI
+        opskit_cli = OpsKitCLI()
+        tools = opskit_cli.discover_tools()
+        tool_names = []
+        for category_tools in tools.values():
+            for tool_info in category_tools:
+                tool_names.append(tool_info['name'])
+        return [name for name in tool_names if name.startswith(incomplete)]
+    except:
+        return []
+
 @cli.command(context_settings=dict(ignore_unknown_options=True, allow_extra_args=True, allow_interspersed_args=False, help_option_names=[]))
-@click.argument('tool_name')
+@click.argument('tool_name', shell_complete=complete_tool_names)
 @click.option('--debug', is_flag=True, help='Enable debug mode')
 @click.pass_context
 def run(ctx, tool_name, debug):
@@ -183,6 +197,17 @@ def status(debug):
 def version():
     """Show version information"""
     print_version()
+
+
+@cli.command()
+@click.argument('shell', type=click.Choice(['bash', 'zsh', 'fish']), required=True)
+def completion(shell):
+    """Generate shell completion script"""
+    try:
+        opskit_cli = OpsKitCLI()
+        opskit_cli.generate_completion(shell)
+    except Exception as e:
+        handle_error(e, _debug_mode)
 
 
 def main():

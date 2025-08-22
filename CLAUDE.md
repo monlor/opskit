@@ -16,12 +16,12 @@ OpsKit 是一个统一的运维工具管理平台，旨在解决运维工具分�
 - **AI 友好**: 每个工具包含 CLAUDE.md 支持 AI 开发
 
 ### 技术架构
-- **主语言**: Python 3.7+ (核心服务)
+- **主语言**: Python 3.7+ (核心框架)
 - **工具语言**: Python + Shell Script
-- **配置格式**: Environment Variables + YAML
-- **存储**: SQLite (轻量级 KV 存储)
+- **配置格式**: Environment Variables
 - **依赖管理**: 共享虚拟环境 + 按需工具环境
 - **平台支持**: macOS + Ubuntu/CentOS/Arch/SUSE
+- **架构理念**: 极简核心，功能由工具自主实现
 
 ## 项目结构
 
@@ -65,16 +65,6 @@ OpsKit 是一个统一的运维工具管理平台，旨在解决运维工具分�
 │           ├── CLAUDE.md
 │           ├── main.py
 │           └── requirements.txt
-├── common/                         # 公共库
-│   ├── python/                     # Python 公共库
-│   │   ├── __init__.py
-│   │   ├── logger.py               # 统一日志管理
-│   │   ├── storage.py              # KV/SQLite 存储
-│   │   └── utils.py                # 通用工具函数
-│   └── shell/                      # Shell 公共库
-│       ├── logger.sh               # Shell 日志函数
-│       ├── storage.sh              # Shell 存储函数
-│       └── utils.sh                # Shell 通用函数
 ├── config/                         # 配置和工具注册
 │   ├── dependencies.yaml           # 依赖配置
 │   └── tools.yaml                  # 工具注册表
@@ -82,12 +72,11 @@ OpsKit 是一个统一的运维工具管理平台，旨在解决运维工具分�
 │   ├── python-tool-development.md  # Python 工具开发指南
 │   └── shell-tool-development.md   # Shell 工具开发指南
 ├── data/                           # 用户数据 (Git 忽略)
-│   └── storage.db                  # SQLite 数据库
+│   └── .env                        # 环境变量配置
 ├── cache/                          # 缓存目录 (Git 忽略)
 │   ├── downloads/                  # 下载缓存
 │   ├── pip_cache/                  # Pip 缓存
 │   ├── requirements/               # 工具依赖缓存
-│   ├── storage.db                  # 缓存数据库
 │   ├── tools/                      # 工具临时目录
 │   └── venvs/                      # 工具特定虚拟环境
 └── logs/                           # 日志文件 (Git 忽略)
@@ -95,20 +84,20 @@ OpsKit 是一个统一的运维工具管理平台，旨在解决运维工具分�
 
 ## 核心组件架构
 
+OpsKit 采用极简化架构，核心框架仅负责环境变量注入和依赖管理，所有功能由工具自主实现。
+
 ### 1. 主执行文件 (`bin/opskit`)
 - **职责**: 程序入口点，命令行参数解析和路由
 - **特点**: Python 脚本，使用共享虚拟环境 shebang
-- **功能**: 命令分发、参数处理、错误处理、版本管理
+- **功能**: 简单的命令分发和参数处理
 
 ### 2. CLI 模块 (`core/cli.py`)
-- **职责**: 交互式命令行界面和工具运行
+- **职责**: 简化的命令行界面和工具运行
 - **功能**:
-  - 交互模式 - 工具浏览和选择
-  - 工具列表 - 按分类显示所有工具
-  - 工具搜索 - 模糊匹配和描述搜索
-  - 工具运行 - 依赖检查和工具执行
-  - 配置管理 - 工具配置界面
-  - 系统状态 - 健康检查和诊断
+  - 工具发现和列表显示
+  - 工具搜索和选择
+  - 工具运行和环境变量注入
+  - 基础配置管理
 
 ### 3. 依赖管理器 (`core/dependency_manager.py`)
 - **职责**: 共享环境和按需依赖管理
@@ -116,29 +105,30 @@ OpsKit 是一个统一的运维工具管理平台，旨在解决运维工具分�
   - 共享虚拟环境管理 (.venv/)
   - 工具特定依赖安装 (cache/venvs/)
   - 依赖缓存和复用 (cache/requirements/)
-  - 系统依赖检测和安装提示
-  - 外部资源下载和管理
+  - 系统依赖检测
 
 ### 4. 环境管理器 (`core/env.py`)
-- **职责**: 环境变量和配置管理
-- **特性**: 基于 python-dotenv 的现代配置管理
+- **职责**: 环境变量管理
+- **特性**: 基于 python-dotenv 的配置管理
 - **功能**:
   - 环境变量加载 (data/.env)
-  - 配置属性访问 (env.cache_dir, env.log_level)
+  - 配置属性访问 (env.cache_dir, env.logs_dir)
   - 工具临时目录创建
-  - 配置摘要和状态
 
-### 5. 环境管理器扩展 (`core/env_manager.py`)
-- **职责**: 高级环境管理功能
-- **功能**: 环境变量管理、工具环境隔离、配置验证
-
-### 6. 平台工具 (`core/platform_utils.py`)
+### 5. 平台工具 (`core/platform_utils.py`)
 - **职责**: 跨平台兼容性和系统检测
 - **功能**:
   - 操作系统和发行版检测
   - 包管理器自动识别
   - 系统命令执行和路径处理
-  - 平台特定逻辑适配
+
+### 6. 环境变量注入系统
+OpsKit 为每个工具自动注入以下环境变量：
+- `OPSKIT_BASE_PATH`: OpsKit 框架根目录
+- `OPSKIT_TOOL_TEMP_DIR`: 工具专属临时目录
+- `OPSKIT_WORKING_DIR`: 用户当前工作目录
+- `TOOL_NAME`: 工具显示名称
+- `TOOL_VERSION`: 工具版本号
 
 ## 工具开发规范
 
@@ -179,41 +169,42 @@ tools/category/tool-name/
 提供典型使用场景的示例
 ```
 
-### 公共库使用
+### 工具自主实现原则
+
+OpsKit 框架采用极简化架构，每个工具需要自主实现所需的功能：
 
 **Python 工具**:
 ```python
-# 导入公共库
-import sys
+# 自主实现日志功能
+import logging
 import os
-sys.path.insert(0, os.path.join(os.environ['OPSKIT_BASE_PATH'], 'common/python'))
 
-from logger import get_logger
-from storage import get_storage
+def setup_logging():
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    return logging.getLogger(__name__)
 
-# 使用统一日志
-logger = get_logger(__name__)
+logger = setup_logging()
 logger.info("工具启动")
 
-# 使用 KV 存储
-storage = get_storage("tool_name")
-storage.set("key", "value")
-
+# 获取 OpsKit 注入的环境变量
+tool_name = os.environ.get('TOOL_NAME')
+temp_dir = os.environ.get('OPSKIT_TOOL_TEMP_DIR')
 ```
 
 **Shell 工具**:
 ```bash
 #!/bin/bash
 
-# 导入公共库
-source "${OPSKIT_BASE_PATH}/common/shell/logger.sh"
-source "${OPSKIT_BASE_PATH}/common/shell/utils.sh"
+# 自主实现日志功能
+log_info() {
+    echo "[INFO] $(date '+%Y-%m-%d %H:%M:%S') - $1" >&2
+}
 
-# 使用统一日志
 log_info "工具启动"
 
-# 检查依赖
-check_command "mysql" "请安装 MySQL 客户端"
+# 获取 OpsKit 注入的环境变量
+TOOL_NAME="${TOOL_NAME}"
+TEMP_DIR="${OPSKIT_TOOL_TEMP_DIR}"
 ```
 
 ## 开发流程
@@ -223,7 +214,7 @@ check_command "mysql" "请安装 MySQL 客户端"
 2. **编写 CLAUDE.md**: 按模板编写工具文档
 3. **实现主程序**: main.py 或 main.sh
 4. **添加依赖声明**: requirements.txt (Python 工具)
-5. **集成公共库**: 使用统一日志和存储
+5. **自主实现功能**: 根据需要实现日志、存储、交互等功能
 6. **本地测试**: 确保工具正常运行
 7. **注册工具**: 更新 config/tools.yaml
 
@@ -312,9 +303,7 @@ OpsKit 采用数据分离架构，确保用户数据与代码库分离：
 ### 目录职责划分
 ```yaml
 data/:           # 用户持久化数据 (Git 忽略)
-  - opskit.yaml  # 主配置文件
   - .env         # 全局变量文件
-  - storage.db   # SQLite 数据库
 
 cache/:          # 临时缓存数据 (Git 忽略)
   - venvs/       # Python 虚拟环境
@@ -323,13 +312,12 @@ cache/:          # 临时缓存数据 (Git 忽略)
   - tools/       # 工具临时目录
 
 logs/:           # 日志文件 (Git 忽略)
-  - opskit.log   # 主应用日志
 
 其他目录:        # Git 跟踪的代码库
   - core/        # 核心模块
   - tools/       # 工具定义
   - config/      # 配置模板
-  - common/      # 公共库
+  - docs/        # 开发文档
 ```
 
 ## 配置管理系统
@@ -341,7 +329,6 @@ OpsKit 使用 python-dotenv 实现现代化配置管理：
 1. **环境变量文件**: `data/.env` (用户自定义配置)
 2. **系统环境变量**: `OPSKIT_*` 前缀的环境变量
 3. **默认配置**: 硬编码在 `core/env.py` 中的默认值
-4. **存储数据库**: `data/storage.db` (运行时状态和缓存)
 
 ### 环境变量配置格式
 ```bash
@@ -352,14 +339,6 @@ OPSKIT_AUTHOR="OpsKit Development Team"
 # 路径配置
 OPSKIT_PATHS_CACHE_DIR=cache           # 缓存目录 (相对或绝对路径)
 OPSKIT_PATHS_LOGS_DIR=logs             # 日志目录 (相对或绝对路径)
-
-# 日志配置
-OPSKIT_LOGGING_CONSOLE_LEVEL=INFO      # 控制台日志级别
-OPSKIT_LOGGING_FILE_ENABLED=false     # 文件日志开关
-OPSKIT_LOGGING_FILE_LEVEL=DEBUG       # 文件日志级别
-OPSKIT_LOGGING_CONSOLE_SIMPLE_FORMAT=true  # 简化控制台格式
-OPSKIT_LOGGING_MAX_FILES=5            # 日志文件保留数量
-OPSKIT_LOGGING_MAX_SIZE=10MB          # 单个日志文件大小
 
 # 工具配置示例
 MYSQL_SYNC_DEFAULT_HOST=localhost
@@ -374,7 +353,6 @@ from core.env import env
 # 通过属性访问配置
 print(env.cache_dir)      # 缓存目录路径
 print(env.logs_dir)       # 日志目录路径
-print(env.log_level)      # 日志级别
 print(env.version)        # OpsKit 版本
 
 # 工具临时目录
@@ -384,32 +362,34 @@ temp_dir = get_tool_temp_dir("mysql-sync")
 tool_env = load_tool_env("/path/to/tool")
 ```
 
-## 错误处理和日志
+## 工具自主实现指南
 
-### 统一错误处理
+### 错误处理建议
+工具可以根据需要自主实现错误处理：
 ```python
-class OpsKitError(Exception):
-    """OpsKit 基础异常类"""
+class ToolError(Exception):
+    """工具特定错误"""
     pass
 
-class DependencyError(OpsKitError):
-    """依赖相关错误"""
-    pass
-
-class ConfigError(OpsKitError):
+class ConfigError(ToolError):
     """配置相关错误"""
     pass
 
-class ToolError(OpsKitError):
-    """工具执行错误"""
+# 使用示例
+try:
+    # 工具操作
     pass
+except Exception as e:
+    logging.error(f"Tool operation failed: {e}")
+    sys.exit(1)
 ```
 
-### 日志管理
-- **级别**: DEBUG, INFO, WARNING, ERROR, CRITICAL
-- **格式**: 时间戳 + 级别 + 模块 + 消息
-- **输出**: 控制台 + 日志文件 (logs/)
-- **轮转**: 按日期或大小轮转日志文件
+### 日志实现建议
+工具可以自主选择日志实现方式：
+- **Python**: 使用标准库 `logging` 模块
+- **Shell**: 自定义日志函数
+- **级别**: 根据需要定义 DEBUG, INFO, WARNING, ERROR
+- **格式**: 自定义时间戳和消息格式
 
 ## 测试策略
 
@@ -440,54 +420,103 @@ python3 setup.py
 # 设置环境变量 (添加到 ~/.bashrc 或 ~/.zshrc)
 export OPSKIT_BASE_PATH="/home/user/.opskit"
 export PATH="$OPSKIT_BASE_PATH/bin:$PATH"
+
+# 启用命令行自动补全 (可选)
+# 使用 completion 子命令生成自动补全脚本
+.venv/bin/python bin/opskit completion bash  # 查看 bash 补全脚本
+.venv/bin/python bin/opskit completion zsh   # 查看 zsh 补全脚本
+.venv/bin/python bin/opskit completion fish  # 查看 fish 补全脚本
 ```
+
+### 命令行自动补全设置
+
+OpsKit 提供了 `completion` 子命令来生成shell自动补全脚本，类似于 `kubectl completion`。
+
+**Bash 用户**：
+```bash
+# 临时启用 (当前会话)
+eval "$(_OPSKIT_COMPLETE=bash_source opskit)"
+
+# 永久启用 (添加到 ~/.bashrc)
+echo 'eval "$(_OPSKIT_COMPLETE=bash_source opskit)"' >> ~/.bashrc
+source ~/.bashrc
+```
+
+**Zsh 用户**：
+```bash
+# 临时启用 (当前会话)  
+eval "$(_OPSKIT_COMPLETE=zsh_source opskit)"
+
+# 永久启用 (添加到 ~/.zshrc)
+echo 'eval "$(_OPSKIT_COMPLETE=zsh_source opskit)"' >> ~/.zshrc
+source ~/.zshrc
+```
+
+**Fish 用户**：
+```bash
+# 临时启用 (当前会话)
+eval (env _OPSKIT_COMPLETE=fish_source opskit)
+
+# 永久启用 (添加到 Fish 配置)
+echo 'eval (env _OPSKIT_COMPLETE=fish_source opskit)' >> ~/.config/fish/config.fish
+```
+
+**功能特性**：
+- 自动补全所有主命令：`list`, `run`, `search`, `config`, `update`, `status`, `version`, `completion`
+- `opskit run <TAB>` 支持工具名称自动补全
+- `opskit completion <TAB>` 支持 shell 类型补全 (bash/zsh/fish)  
+- 基于 Click 框架的原生自动补全功能，无需手动维护补全脚本
 
 ### 核心功能测试
 ```bash
-# 测试工具列表 (使用共享虚拟环境)
-opskit list
+# 重要：使用 .venv 中的 Python 执行测试命令
+# 测试工具列表
+.venv/bin/python bin/opskit list
 
 # 测试交互模式
-opskit
+.venv/bin/python bin/opskit
 
 # 测试工具搜索
-opskit search mysql
+.venv/bin/python bin/opskit search mysql
 
 # 测试系统状态
-opskit status
+.venv/bin/python bin/opskit status
 
 # 测试版本信息
-opskit version
+.venv/bin/python bin/opskit version
+
+# 测试帮助信息
+.venv/bin/python bin/opskit --help
 ```
 
 ### 依赖管理测试
 ```bash
 # 测试共享环境工具
-opskit run system-info    # 使用共享虚拟环境
+.venv/bin/python bin/opskit run system-info    # 使用共享虚拟环境
 
 # 测试按需依赖安装
-opskit run mysql-sync     # 自动安装工具特定依赖
-opskit run k8s-resource-copy  # 创建独立虚拟环境
+.venv/bin/python bin/opskit run mysql-sync     # 自动安装工具特定依赖
+.venv/bin/python bin/opskit run k8s-resource-copy  # 创建独立虚拟环境
 
 # 测试 Shell 工具 (无 Python 依赖)
-opskit run port-scanner   # 直接运行 Shell 脚本
-opskit run disk-usage     # 系统工具调用
+.venv/bin/python bin/opskit run port-scanner   # 直接运行 Shell 脚本
+.venv/bin/python bin/opskit run disk-usage     # 系统工具调用
 ```
 
 ### 工具特定测试
 ```bash
 # 数据库工具
-opskit run mysql-sync         # MySQL 同步工具
+.venv/bin/python bin/opskit run mysql-sync         # MySQL 同步工具
 
 # 网络工具  
-opskit run port-scanner       # 端口扫描
+.venv/bin/python bin/opskit run port-scanner       # 端口扫描
 
 # 系统工具
-opskit run disk-usage         # 磁盘分析
-opskit run system-info        # 系统信息
+.venv/bin/python bin/opskit run disk-usage         # 磁盘分析
+.venv/bin/python bin/opskit run system-info        # 系统信息
 
 # 云原生工具
-opskit run k8s-resource-copy  # Kubernetes 资源复制
+.venv/bin/python bin/opskit run k8s-resource-copy  # Kubernetes 资源复制
 ```
 
 ## 性能要求

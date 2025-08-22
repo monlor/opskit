@@ -47,29 +47,6 @@ class EnvConfig:
             logs_dir = str(opskit_root / logs_dir)
         return logs_dir
     
-    @property
-    def log_level(self) -> str:
-        return os.getenv('OPSKIT_LOGGING_CONSOLE_LEVEL', 'INFO')
-    
-    @property
-    def log_file_enabled(self) -> bool:
-        return os.getenv('OPSKIT_LOGGING_FILE_ENABLED', 'false').lower() == 'true'
-    
-    @property
-    def log_file_level(self) -> str:
-        return os.getenv('OPSKIT_LOGGING_FILE_LEVEL', 'DEBUG')
-    
-    @property
-    def log_simple_format(self) -> bool:
-        return os.getenv('OPSKIT_LOGGING_CONSOLE_SIMPLE_FORMAT', 'true').lower() == 'true'
-    
-    @property
-    def log_max_files(self) -> int:
-        return int(os.getenv('OPSKIT_LOGGING_MAX_FILES', '5'))
-    
-    @property
-    def log_max_size(self) -> str:
-        return os.getenv('OPSKIT_LOGGING_MAX_SIZE', '10MB')
     
     @property
     def version(self) -> str:
@@ -79,10 +56,6 @@ class EnvConfig:
     def author(self) -> str:
         return OPSKIT_AUTHOR
     
-    @property
-    def ui_theme(self) -> str:
-        """UI theme setting: auto, light, dark"""
-        return os.getenv('OPSKIT_UI_THEME', 'auto').lower()
 
 
 # Global env object
@@ -127,13 +100,9 @@ def is_first_run() -> bool:
     return not env_file.exists()
 
 
-def initialize_env_file(log_to_file: bool = False, theme: str = 'auto') -> bool:
+def initialize_env_file() -> bool:
     """
     Initialize the .env file with basic configuration
-    
-    Args:
-        log_to_file: Whether to enable file logging
-        theme: UI theme ('auto', 'light', 'dark')
     
     Returns:
         True if initialization was successful, False otherwise
@@ -143,19 +112,8 @@ def initialize_env_file(log_to_file: bool = False, theme: str = 'auto') -> bool:
         env_file.parent.mkdir(parents=True, exist_ok=True)
         
         # Create basic .env configuration
-        config_content = f"""# OpsKit Configuration File
+        config_content = """# OpsKit Configuration File
 # This file contains environment variables for OpsKit configuration
-
-# Logging Configuration
-OPSKIT_LOGGING_FILE_ENABLED={str(log_to_file).lower()}
-OPSKIT_LOGGING_CONSOLE_LEVEL=INFO
-OPSKIT_LOGGING_FILE_LEVEL=DEBUG
-OPSKIT_LOGGING_CONSOLE_SIMPLE_FORMAT=true
-OPSKIT_LOGGING_MAX_FILES=5
-OPSKIT_LOGGING_MAX_SIZE=10MB
-
-# UI Theme Configuration (auto, light, dark)
-OPSKIT_UI_THEME={theme}
 
 # Path Configuration (relative to OpsKit root)
 OPSKIT_PATHS_CACHE_DIR=cache

@@ -1,145 +1,142 @@
-# MySQL Sync Tool
+# MySQL数据库批量同步工具 - OpsKit 版本
 
-## Description
-A MySQL database batch synchronization tool that provides safe, interactive database-to-database sync operations with enhanced connection caching, batch migration support, connection management, and detailed confirmation dialogs.
+## 功能描述
+MySQL数据库批量同步工具，提供安全、交互式的数据库到数据库同步操作，支持连接缓存、批量迁移和详细的确认对话框。
 
-## Technical Architecture
-- **Implementation Language**: Python 3.7+
-- **Core Dependencies**: pymysql, click, colorama
-- **System Requirements**: mysqldump and mysql commands in PATH
-- **Database Support**: MySQL 5.7+, MariaDB 10.0+
-- **Storage Backend**: SQLite via OpsKit storage system
+## 技术架构
+- 实现语言: Python 3.7+
+- 核心依赖: pymysql (数据库连接), mysqldump/mysql (数据传输命令)
+- 系统要求: MySQL 客户端工具必须在 PATH 中可用
+- OpsKit 集成: 使用 OpsKit 环境变量和缓存目录管理
 
-## Key Features
-- **Enhanced Connection Management**: Named connections with secure password caching and selection interface
-- **Smart Connection Selection**: Cached connections displayed by most recent usage
-- **Interactive Connection Management**: View, test, and delete cached connections
-- **Batch Database Selection**: Single, multiple, range, or all database selection
-- **Safety Features**: Same-database checks, system database filtering, explicit confirmations
-- **Connection Caching**: Base64 encoded password storage with timestamp tracking in SQLite
-- **Comprehensive Logging**: Console and file logging with detailed operation tracking
-- **Command Support**: history, connections, help commands
+## 配置项
 
-## Configuration Schema
-```yaml
-# Connection settings
-connections:
-  default_timeout: 30
-  max_retries: 3
-  cache_passwords: true
+### OpsKit 环境变量
+工具使用以下 OpsKit 内置环境变量：
 
-# Batch operation settings
-batch:
-  confirm_destructive: true
-  max_concurrent: 1
-  show_progress: true
+- **OPSKIT_TOOL_TEMP_DIR**: 工具临时文件夹，用于写入连接缓存和配置文件
+- **OPSKIT_BASE_PATH**: OpsKit 的目录路径
+- **OPSKIT_WORKING_DIR**: 用户终端当前所在目录
+- **TOOL_NAME**: 工具名称（mysql-sync）
+- **TOOL_VERSION**: 工具版本号
 
-# Logging settings
-logging:
-  level: INFO
-  file_rotation: true
-  max_log_files: 10
+### 缓存文件结构
+```
+${OPSKIT_TOOL_TEMP_DIR}/
+├── connections.json    # 缓存的数据库连接信息（密码已加密）
 ```
 
-## Code Structure
+## 开发指南
 
-### Main Components
-- **MySQLSyncTool Class**: Core synchronization logic and connection management
-- **Connection Management**: Secure credential caching and validation
-- **Batch Operations**: Multi-database selection and execution
-- **Safety Checks**: System database filtering and validation
-- **Logging System**: Comprehensive operation tracking
+### 核心架构
+- **MySQLSyncTool 类**: 单文件架构，包含所有功能
+- **配置管理**: 配置存储在 `OPSKIT_TOOL_TEMP_DIR` 目录
+- **连接缓存**: 连接信息缓存在 `connections.json`（包含 base64 编码的密码）
+- **命名连接**: 便于识别和重用的连接名称
+- **无文件日志**: 所有信息直接输出到 stdout
 
-### Key Methods
-- `get_connection_info()`: Enhanced interactive connection input with caching support
-- `list_cached_connections()`: List all cached connections with usage details
-- `select_cached_connection()`: Interactive selection from cached connections
-- `manage_cached_connections()`: Complete connection management interface
-- `test_connection()`: Connection testing and automatic caching
-- `list_databases()`: Database discovery with system filtering
-- `select_databases()`: Interactive batch database selection
-- `sync_database()`: Core mysqldump -> mysql pipe execution
-- `batch_sync()`: Orchestrate multi-database synchronization
-- `show_help()`: Display comprehensive tool help
+### 安全模型
+- 密码通过 `getpass` 收集（隐藏输入）
+- 密码使用简单 base64 编码存储（非安全加密）
+- 缓存前进行连接验证
+- 防止意外自同步的相同数据库安全检查
+- 破坏性操作需要用户输入 'YES' 确认
 
-## Error Handling Strategy
-- **Connection Errors**: Retry with exponential backoff
-- **Database Errors**: Individual database failure handling
-- **System Errors**: Graceful degradation with user guidance
-- **Interrupt Handling**: Clean cancellation with Ctrl+C support
+### 批量同步流程
+1. 交互式连接输入，支持自定义名称（源 → 目标）
+2. 连接测试和缓存，密码加密存储
+3. 数据库内省，系统数据库过滤
+4. 交互式批量数据库选择（单个、多个、范围或全部）
+5. 批量确认显示，包含迁移统计信息
+6. 对每个数据库顺序执行 mysqldump → mysql 管道
+7. 综合成功/失败报告
 
-## Security Considerations
-- **Password Storage**: Base64 encoding (not secure encryption) - suitable for development/internal use
-- **Connection Validation**: Pre-operation connection testing before caching
-- **System Database Protection**: Automatic filtering of system databases (mysql, information_schema, etc.)
-- **Confirmation Required**: Explicit user confirmation for destructive operations
-- **Cache Management**: Users can view, test, and delete cached connections
-- **Connection Testing**: Test cached connections before use to detect credential changes
-- **Temporary Use**: Option to use connections without caching for sensitive environments
-- **Auto-Retry Logic**: Automatic retry with configurable attempts and delay for failed sync operations
-- **Consistent Cache Sorting**: Cached connections sorted consistently by last used timestamp
+### 关键功能实现
 
-## Testing Approach
-- **Unit Tests**: Core functionality and edge cases
-- **Integration Tests**: End-to-end database synchronization
-- **Connection Tests**: Various MySQL/MariaDB versions
-- **Error Scenarios**: Network failures, permission errors, invalid databases
+**连接缓存策略**
+- 用户定义标识符的命名连接
+- 文件缓存包含 base64 编码的密码以便使用
+- 无需密码提示即可自动重用缓存连接
+- `last_used` 时间戳跟踪
 
-## Usage Examples
+**批量数据库选择**
+- 使用 `SHOW DATABASES` 列出可用数据库
+- 自动过滤系统数据库（information_schema, mysql, performance_schema, sys）
+- 交互式多选支持：单个 (3)、多个 (1,3,5)、范围 (1-5) 或全部
+- 支持在任何时候 Ctrl+C 取消选择
+- 实时数据库可用性验证
 
-### Basic Synchronization
+**错误处理策略**
+- 各阶段键盘中断处理
+- 启动时验证系统命令可用性
+- 重试机制：失败时最多重试 3 次，包含延迟
+- 部分批量失败的优雅处理
+
+**安全特性**
+- 操作前连接测试
+- 自动系统数据库过滤防止意外同步
+- 批量操作确认，包含详细统计信息
+- 批量操作需要明确的 'YES' 确认
+- 个别数据库同步状态跟踪和报告
+
+## 文件结构
+
+```
+tools/database/mysql-sync/
+├── main.py             # 主应用程序（单文件）
+├── requirements.txt    # Python 依赖
+└── CLAUDE.md          # 本文件
+```
+
+用户数据存储在 `${OPSKIT_TOOL_TEMP_DIR}/`：
+- `connections.json` - 缓存连接信息（包含加密密码）
+
+## 使用示例
+
+### 基本使用流程
 ```bash
-# Interactive mode with enhanced connection caching
-# 1. Shows cached connections if available
-# 2. Allows selection from cache or creation of new connection
-# 3. Tests connection before caching
+# 通过 OpsKit 运行工具
+opskit run mysql-sync
+
+# 工具将引导您完成以下步骤：
+# 1. 配置源数据库连接（或选择已缓存的连接）
+# 2. 配置目标数据库连接（或选择已缓存的连接）
+# 3. 选择要同步的数据库（支持多选）
+# 4. 确认同步操作
+# 5. 执行批量同步
 ```
 
-### Connection Management
-```bash
-# View and manage cached connections
-connections
-> 1. prod-db (admin@db1.example.com:3306)
->    Last used: 2024-01-15 10:30:45
-> 2. staging-db (user@db2.example.com:3306) 
->    Last used: 2024-01-14 15:22:10
-> Options: del <number>, test <number>, clear, quit
-```
+### 连接缓存使用
+- 首次使用时输入连接信息，工具会自动缓存
+- 后续使用可直接选择已缓存的连接
+- 支持为每个连接设置自定义名称便于识别
 
-### Command Line Options
-```bash
-# Show sync history
-history
+### 数据库选择模式
+- 单个选择：输入编号（如：3）
+- 多个选择：用逗号分隔（如：1,3,5）
+- 范围选择：使用连字符（如：1-5）
+- 全部选择：输入 'all'
 
-# Manage connections
-connections
+### 安全确认
+- 同步前会显示详细的操作信息
+- 必须输入 'YES'（大写）才能继续
+- 任何时候都可以使用 Ctrl+C 取消操作
 
-# Show help
-help
-```
+## 系统要求
+- Python 3.7+ 环境
+- MySQL 客户端工具（mysqldump 和 mysql 命令）
+- pymysql Python 包
+- OpsKit 环境（提供必要的环境变量）
 
-### Database Selection
-```bash
-# Multiple database selection
-Select databases: 1,3,5
-# Range selection  
-Select databases: 1-5
-# All databases
-Select databases: all
-```
+## 故障排除
 
-### Connection Workflow
-```bash
-1. Tool shows cached connections (sorted by most recent usage)
-2. User selects cached connection or chooses "new" 
-3. For new connections, user enters details
-4. Connection is tested before proceeding
-5. Successful connections are automatically cached (if enabled)
-6. Failed connections prompt for retry or exit
-```
+### 常见问题
+1. **找不到 mysqldump 命令**: 需要安装 MySQL 客户端工具
+2. **连接失败**: 检查网络连接和数据库服务器状态
+3. **权限不足**: 确保数据库用户有足够的权限执行 dump 和 import 操作
+4. **缓存文件损坏**: 删除 `connections.json` 文件重新创建连接
 
-## Development Notes
-- Uses OpsKit common libraries for logging and storage
-- Integrates with OpsKit configuration management
-- Follows OpsKit tool development standards
-- English-only code and comments as per project requirements
+### 性能优化
+- 大型数据库同步可能需要较长时间
+- 网络不稳定时建议分批同步
+- 重试机制会在失败时自动重试，最多 3 次

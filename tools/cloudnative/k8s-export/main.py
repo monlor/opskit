@@ -9,34 +9,121 @@ import sys
 import json
 import yaml
 import subprocess
-from typing import Dict, List, Optional, Set
+from typing import Dict, List, Optional, Set, Tuple
 from pathlib import Path
 import click
+import logging
 from dataclasses import dataclass
+from datetime import datetime
 
-# Import OpsKit common libraries
-sys.path.insert(0, os.path.join(os.environ['OPSKIT_BASE_PATH'], 'common/python'))
+# 获取 OpsKit 环境变量
+OPSKIT_TOOL_TEMP_DIR = os.environ.get('OPSKIT_TOOL_TEMP_DIR', os.path.join(os.getcwd(), '.k8s-export-temp'))
+OPSKIT_BASE_PATH = os.environ.get('OPSKIT_BASE_PATH', os.path.expanduser('~/.opskit'))
+OPSKIT_WORKING_DIR = os.environ.get('OPSKIT_WORKING_DIR', os.getcwd())
+TOOL_NAME = os.environ.get('TOOL_NAME', 'k8s-export')
+TOOL_VERSION = os.environ.get('TOOL_VERSION', '1.0.0')
 
-from logger import get_logger
-from storage import get_storage
-from utils import run_command, timestamp, get_env_var
-from interactive import get_interactive
+# 创建临时目录
+os.makedirs(OPSKIT_TOOL_TEMP_DIR, exist_ok=True)
 
-# Third-party imports
+"""
+最小化对 OpsKit 内部库依赖：允许使用 env 和 common/python/utils（如可用），
+其他统一用简单的 print/input，输出风格参考 mysql-sync。
+"""
+
+# Import OpsKit utils (保留基础工具函数)，不可用时提供兜底实现
+try:
+    sys.path.insert(0, os.path.join(OPSKIT_BASE_PATH, 'common/python'))
+    from utils import run_command, get_env_var
+except Exception:
+    # 简单的命令执行函数
+    def run_command(cmd: List[str], timeout: int = 30) -> Tuple[bool, str, str]:
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+            return result.returncode == 0, result.stdout, result.stderr
+        except (subprocess.TimeoutExpired, FileNotFoundError) as e:
+            return False, "", str(e)
+
+    # 简单的环境变量获取函数
+    def get_env_var(name: str, default=None, var_type=str):
+        value = os.environ.get(name, default)
+        if var_type == bool and isinstance(value, str):
+            return value.lower() in ("true", "1", "yes", "on")
+        elif var_type == int and isinstance(value, str):
+            try:
+                return int(value)
+            except ValueError:
+                return default
+        return value
+
+# Minimal logger setup (used for debug/info/warn messages)
+logging.basicConfig(level=logging.INFO, format='[%(levelname)s] %(message)s')
+logger = logging.getLogger(__name__)
+
+def timestamp() -> str:
+    return datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+class SimpleInteractive:
+    def section(self, title: str):
+        print("\n" + "=" * 80)
+        print(title)
+        print("=" * 80)
+    def subsection(self, title: str):
+        print(f"\n—— {title} ——")
+    def info(self, msg: str):
+        print(msg)
+    def warning_msg(self, msg: str):
+        print(f"⚠️  {msg}")
+    def success(self, msg: str):
+        print(f"✅ {msg}")
+    def failure(self, msg: str):
+        print(f"❌ {msg}")
+    def operation_start(self, title: str, extra: str = ""):
+        print(f"\n🔄 {title} {extra}".rstrip())
+        print("-" * 60)
+    def confirm(self, prompt: str, default: bool = True) -> bool:
+        suffix = "[Y/n]" if default else "[y/N]"
+        try:
+            ans = input(f"{prompt} {suffix}: ").strip().lower()
+            if ans == "":
+                return default
+            return ans in ("y", "yes")
+        except KeyboardInterrupt:
+            print("\n👋 用户取消操作")
+            return False
+    def get_input(self, prompt: str, required: bool = True) -> str:
+        while True:
+            try:
+                val = input(f"{prompt}: ")
+            except KeyboardInterrupt:
+                print("\n👋 用户取消操作")
+                return ""
+            val = val.strip()
+            if val or not required:
+                return val
+            logger.warning("输入不能为空，请重试")
+    def with_loading(self, func, message: str, *args, **kwargs):
+        print(f"⏳ {message}...")
+        return func(*args, **kwargs)
+    def user_cancelled(self, action: str = ""):
+        print(f"\n👋 用户取消{action}操作" if action else "\n👋 用户取消操作")
+
+def get_interactive(*_args, **_kwargs) -> SimpleInteractive:
+    return SimpleInteractive()
+
+# 全局交互实例，避免依赖外部 interactive 库
+interactive = SimpleInteractive()
+
+# Third-party imports with error handling
 try:
     import colorama
     from colorama import Fore, Back, Style
     colorama.init()
-except ImportError as e:
-    # Use basic logging for dependency errors since interactive isn't available yet
-    print(f"Missing required dependency: {e}")
-    print("Please ensure all dependencies are installed.")
-    sys.exit(1)
-
-# Initialize OpsKit components
-logger = get_logger(__name__)
-storage = get_storage('k8s-export')
-interactive = get_interactive(__name__, 'k8s-export')
+except Exception:
+    # 缺失 colorama 不影响运行
+    class _No:
+        RESET_ALL = ""
+    Fore = Back = Style = _No()
 
 
 @dataclass
@@ -73,10 +160,8 @@ class KubectlManager:
         success, stdout, stderr = run_command(['kubectl', 'version', '--client'])
         if success:
             self.kubectl_path = 'kubectl'
-            logger.info("✅ kubectl is available")
             return True
         else:
-            logger.error("❌ kubectl not found in PATH")
             return False
     
     def check_krew(self) -> bool:
@@ -84,10 +169,8 @@ class KubectlManager:
         success, stdout, stderr = run_command(['kubectl', 'krew', 'version'])
         if success:
             self.krew_available = True
-            logger.info("✅ krew is available")
             return True
         else:
-            logger.warning("⚠️ krew is not available")
             return False
     
     def check_plugins(self) -> Dict[str, bool]:
@@ -166,16 +249,16 @@ class KubectlManager:
             try:
                 data = json.loads(stdout)
                 items = data.get('items', [])
-                logger.debug(f"Successfully retrieved {len(items)} {resource_type} items from {'namespace ' + namespace if namespace else 'cluster'}")
+                logger.debug(f"Retrieved {len(items)} {resource_type} from {namespace or 'cluster'}")
                 return items
             except json.JSONDecodeError as e:
-                logger.error(f"Failed to parse resources JSON for {resource_type}: {e}")
+                logger.error(f"Failed to parse {resource_type} JSON: {e}")
         else:
             # Log the specific error for debugging
             if "forbidden" in stderr.lower():
-                logger.debug(f"Permission denied for {resource_type} in {namespace or 'cluster'}: {stderr}")
+                logger.debug(f"Permission denied: {resource_type} in {namespace or 'cluster'}: {stderr}")
             elif "not found" in stderr.lower() or "no resources found" in stderr.lower():
-                logger.debug(f"No {resource_type} resources found in {namespace or 'cluster'}")
+                logger.debug(f"No {resource_type} found in {namespace or 'cluster'}")
             else:
                 logger.debug(f"Failed to get {resource_type} from {namespace or 'cluster'}: {stderr}")
         return []
@@ -659,13 +742,11 @@ class K8sExportTool:
         self.resource_types = self.kubectl.get_available_resource_types(self.use_dynamic_resource_types)
         
         if self.use_dynamic_resource_types:
-            logger.info(f"🔍 Discovered {len(self.resource_types)} resource types (including CRDs)")
-            logger.debug(f"Available resource types: {self.resource_types}")
+            print(f"🔍 已发现 {len(self.resource_types)} 种资源类型（包含 CRD）")
         else:
-            logger.info(f"📋 Using {len(self.resource_types)} common resource types")
-            logger.debug(f"Common resource types: {self.resource_types}")
+            print(f"📋 使用常见资源类型，共 {len(self.resource_types)} 种")
         
-        logger.info(f"🚀 Starting {self.tool_name}")
+        print(f"🚀 启动 {self.tool_name}")
     
     def _resolve_config(self, param_value, env_var_name, default_value, value_type=None):
         """Resolve configuration with priority: parameter > environment variable > default"""
@@ -678,10 +759,12 @@ class K8sExportTool:
     
     def check_dependencies(self) -> bool:
         """Check if required dependencies are available"""
-        logger.info("🔍 Checking dependencies...")
+        print("🔍 Checking dependencies for k8s-export...")
         
         # Check kubectl
-        if not self.kubectl.check_kubectl():
+        if self.kubectl.check_kubectl():
+            print("✅ kubectl 可用")
+        else:
             interactive.failure("kubectl is required but not found")
             interactive.info("Please install kubectl: https://kubernetes.io/docs/tasks/tools/")
             return False
@@ -689,7 +772,7 @@ class K8sExportTool:
         # Check krew (optional but recommended)
         if self.kubectl.check_krew():
             plugins = self.kubectl.check_plugins()
-            
+            print("✅ krew 可用")
             # Report plugin status
             for plugin_name, available in plugins.items():
                 if available:
@@ -707,7 +790,7 @@ class K8sExportTool:
             interactive.info("Please configure kubectl with at least one cluster context")
             return False
         
-        logger.info("✅ All required dependencies are available")
+        print("✅ All dependencies satisfied for k8s-export")
         return True
     
     def select_export_settings(self) -> Dict:
@@ -776,29 +859,26 @@ class K8sExportTool:
                 
                 if namespace_resources:
                     all_resources[namespace] = namespace_resources
-                    logger.debug(f"Found {len(namespace_resources)} resources in {namespace}")
-                else:
-                    logger.debug(f"No resources found in {namespace}")
             
             return all_resources
         
         # Execute resource discovery with loading spinner
-        interactive.info(f"Discovering resources in {len(namespaces)} namespaces...")
+        interactive.info(f"正在发现 {len(namespaces)} 个命名空间中的资源...")
         all_resources = interactive.with_loading(
             discover_all_resources,
-            f"Discovering resources in {len(namespaces)} namespaces"
+            f"发现 {len(namespaces)} 个命名空间中的资源"
         )
         
         # Display summary after discovery
         for namespace, ns_resources in all_resources.items():
-            interactive.info(f"  📦 {namespace}: {len(ns_resources)} resources")
+            interactive.info(f"  📦 {namespace}: {len(ns_resources)} 个资源")
         
         return all_resources
     
     
     def export_resources(self, resources: Dict[str, List[K8sResource]], use_neat: bool, context: str) -> Dict[str, int]:
         """Export resources to files"""
-        interactive.operation_start("Resource Export")
+        interactive.operation_start("资源导出")
         
         # Create output directory structure
         if self.custom_output_dir:
@@ -902,16 +982,16 @@ class K8sExportTool:
             
             # Show discovery summary
             total_resources = sum(len(ns_resources) for ns_resources in resources.values())
-            interactive.subsection("Discovery Summary")
-            interactive.info(f"  Total resources found: {total_resources}")
-            interactive.info(f"  Namespaces: {len(resources)}")
+            interactive.subsection("发现摘要")
+            interactive.info(f"  发现资源总数: {total_resources}")
+            interactive.info(f"  命名空间数量: {len(resources)}")
             for namespace, ns_resources in resources.items():
-                interactive.info(f"    {namespace}: {len(ns_resources)} resources")
+                interactive.info(f"    {namespace}: {len(ns_resources)} 个资源")
             
             # Confirm export
-            proceed = interactive.confirm("Proceed with export?", default=True)
+            proceed = interactive.confirm("是否继续导出?", default=True)
             if not proceed:
-                interactive.user_cancelled("export")
+                interactive.user_cancelled("导出")
                 return
             
             # Export resources
@@ -920,19 +1000,19 @@ class K8sExportTool:
             # Final success message
             total_exported = sum(export_stats.values())
             if total_exported > 0:
-                logger.info("✅ Resource export completed successfully")
-                interactive.success("Export completed successfully!")
-                interactive.info(f"  {total_exported} resources exported from {len(export_stats)} namespaces")
+                print("✅ 资源导出完成")
+                interactive.success("导出成功！")
+                interactive.info(f"  从 {len(export_stats)} 个命名空间导出 {total_exported} 个资源")
             else:
-                logger.error("❌ No resources were exported")
-                interactive.failure("No resources were exported")
+                print("❌ 未导出任何资源")
+                interactive.failure("未导出任何资源")
             
         except KeyboardInterrupt:
-            logger.info("❌ Operation cancelled by user")
+            print("\n👋 用户取消操作")
             interactive.user_cancelled()
         except Exception as e:
-            logger.error(f"❌ Unexpected error: {e}")
-            interactive.failure(f"Unexpected error: {e}")
+            print(f"\n❌ 程序错误: {e}")
+            interactive.failure(f"程序错误: {e}")
             sys.exit(1)
 
 

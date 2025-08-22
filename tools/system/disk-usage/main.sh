@@ -1,32 +1,42 @@
 #!/bin/bash
 
-# Disk Usage Analysis Tool
+# Disk Usage Analysis Tool - OpsKit Version
 # Displays disk usage information with configurable thresholds and formatting.
 # All configuration is loaded from environment variables.
 
-# Load OpsKit common shell libraries
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "${OPSKIT_BASE_PATH}/common/shell/logger.sh"
-source "${OPSKIT_BASE_PATH}/common/shell/utils.sh"
-source "${OPSKIT_BASE_PATH}/common/shell/interactive.sh"
+# 获取 OpsKit 环境变量
+OPSKIT_TOOL_TEMP_DIR="${OPSKIT_TOOL_TEMP_DIR:-$(pwd)/.disk-usage-temp}"
+OPSKIT_BASE_PATH="${OPSKIT_BASE_PATH:-$HOME/.opskit}"
+OPSKIT_WORKING_DIR="${OPSKIT_WORKING_DIR:-$(pwd)}"
+TOOL_NAME="${TOOL_NAME:-disk-usage}"
+TOOL_VERSION="${TOOL_VERSION:-1.0.0}"
 
-# Tool information will be injected by cli.py
-# TOOL_NAME and TOOL_VERSION are provided by the framework
+# 创建临时目录
+mkdir -p "$OPSKIT_TOOL_TEMP_DIR"
 
-# Load configuration from environment variables with defaults using utils
-SHOW_PERCENTAGE=$(get_env_var "SHOW_PERCENTAGE" "true" "bool")
-SHOW_HUMAN_READABLE=$(get_env_var "SHOW_HUMAN_READABLE" "true" "bool")
-SHOW_FILESYSTEM_TYPE=$(get_env_var "SHOW_FILESYSTEM_TYPE" "false" "bool")
-SORT_BY_USAGE=$(get_env_var "SORT_BY_USAGE" "true" "bool")
-WARNING_THRESHOLD=$(get_env_var "WARNING_THRESHOLD" "80" "int")
-CRITICAL_THRESHOLD=$(get_env_var "CRITICAL_THRESHOLD" "95" "int")
-ALERT_ON_THRESHOLD=$(get_env_var "ALERT_ON_THRESHOLD" "true" "bool")
-OUTPUT_FORMAT=$(get_env_var "OUTPUT_FORMAT" "table" "str")
-SHOW_HEADER=$(get_env_var "SHOW_HEADER" "true" "bool")
-MAX_ENTRIES=$(get_env_var "MAX_ENTRIES" "20" "int")
-TIMEOUT=$(get_env_var "TIMEOUT" "10" "int")
-EXCLUDE_TMPFS=$(get_env_var "EXCLUDE_TMPFS" "true" "bool")
-EXCLUDE_PROC=$(get_env_var "EXCLUDE_PROC" "true" "bool")
+# 无需额外的日志函数，直接使用 echo
+
+# 获取环境变量的简单函数
+get_env_var() {
+    local var_name="$1"
+    local default_value="$2"
+    echo "${!var_name:-$default_value}"
+}
+
+# Load configuration from environment variables with defaults
+SHOW_PERCENTAGE=$(get_env_var "SHOW_PERCENTAGE" "true")
+SHOW_HUMAN_READABLE=$(get_env_var "SHOW_HUMAN_READABLE" "true")
+SHOW_FILESYSTEM_TYPE=$(get_env_var "SHOW_FILESYSTEM_TYPE" "false")
+SORT_BY_USAGE=$(get_env_var "SORT_BY_USAGE" "true")
+WARNING_THRESHOLD=$(get_env_var "WARNING_THRESHOLD" "80")
+CRITICAL_THRESHOLD=$(get_env_var "CRITICAL_THRESHOLD" "95")
+ALERT_ON_THRESHOLD=$(get_env_var "ALERT_ON_THRESHOLD" "true")
+OUTPUT_FORMAT=$(get_env_var "OUTPUT_FORMAT" "table")
+SHOW_HEADER=$(get_env_var "SHOW_HEADER" "true")
+MAX_ENTRIES=$(get_env_var "MAX_ENTRIES" "20")
+TIMEOUT=$(get_env_var "TIMEOUT" "10")
+EXCLUDE_TMPFS=$(get_env_var "EXCLUDE_TMPFS" "true")
+EXCLUDE_PROC=$(get_env_var "EXCLUDE_PROC" "true")
 
 
 get_disk_usage() {
@@ -45,7 +55,7 @@ get_disk_usage() {
     # Get disk usage data
     local df_output
     if ! df_output=$(timeout "$TIMEOUT" df $df_options 2>/dev/null); then
-        error "Failed to get disk usage information"
+        echo "❌ 获取磁盘使用信息失败"
         return 1
     fi
     
@@ -92,9 +102,9 @@ check_thresholds() {
     
     if [[ -n "$usage" && "$usage" =~ ^[0-9]+$ ]]; then
         if [[ $usage -ge $CRITICAL_THRESHOLD ]]; then
-            critical "$mount is ${usage}% full"
+            echo "❌ $mount 使用率 ${usage}% (危险)"
         elif [[ $usage -ge $WARNING_THRESHOLD ]]; then
-            warning "$mount is ${usage}% full"
+            echo "⚠️  $mount 使用率 ${usage}% (警告)"
         fi
     fi
 }
@@ -120,9 +130,11 @@ format_table() {
     local line_count=0
     
     if [[ "$SHOW_HEADER" == "true" ]]; then
-        subsection "Filesystem Usage Report"
-        info "$(echo "$df_data" | head -1)"
-        info "----------------------------------------"
+        echo ""
+        echo "📊 文件系统使用报告"
+        echo "-" * 50
+        echo "$(echo "$df_data" | head -1)"
+        echo "----------------------------------------"
     fi
     
     # Process each line (skip header)
@@ -145,7 +157,7 @@ format_table() {
         # Check entry limit
         ((line_count++))
         if [[ $line_count -gt $MAX_ENTRIES ]]; then
-            info "... (showing first $MAX_ENTRIES entries)"
+            echo "... (显示前 $MAX_ENTRIES 条记录)"
             break
         fi
         
@@ -155,19 +167,19 @@ format_table() {
         local mount_point
         mount_point=$(get_mount_point "$line")
         
-        # Color code based on usage
-        local color=""
+        # Color code based on usage (simplified without color codes)
+        local status=""
         if [[ -n "$usage_percent" && "$usage_percent" =~ ^[0-9]+$ ]]; then
             if [[ $usage_percent -ge $CRITICAL_THRESHOLD ]]; then
-                color="$RED"
+                status="🔴"
             elif [[ $usage_percent -ge $WARNING_THRESHOLD ]]; then
-                color="$YELLOW"
+                status="🟡"
             else
-                color="$GREEN"
+                status="🟢"
             fi
         fi
         
-        info "${color}$line${NC}"
+        echo "${status} $line"
         
         # Check thresholds and alert
         check_thresholds "$usage_percent" "$mount_point"
@@ -196,14 +208,14 @@ format_json() {
     done
     
     json_output="$json_output]"
-    info "$json_output"
+    echo "$json_output"
 }
 
 format_csv() {
     local df_data="$1"
     
     if [[ "$SHOW_HEADER" == "true" ]]; then
-        info "Filesystem,Mount,Usage%"
+        echo "Filesystem,Mount,Usage%"
     fi
     
     echo "$df_data" | tail -n +2 | while IFS= read -r line; do
@@ -214,69 +226,70 @@ format_csv() {
         mount_point=$(get_mount_point "$line")
         usage_percent=$(parse_usage_percentage "$line")
         
-        info "$filesystem,$mount_point,$usage_percent"
+        echo "$filesystem,$mount_point,$usage_percent"
     done
 }
 
 main() {
-    # Start tool execution with enhanced logging
-    section "Disk Usage Analysis Tool"
-    operation_start "Disk Usage Analysis" "analyzing filesystem usage"
+    echo "📊 磁盘使用分析工具"
+    echo "=" * 50
+    echo "⚙️  工具版本: $TOOL_VERSION"
+    echo "📂 临时目录: $OPSKIT_TOOL_TEMP_DIR"
+    echo "📁 工作目录: $OPSKIT_WORKING_DIR"
+    echo ""
     
     # Show configuration info
-    display_info "Configuration Settings" \
-        "Warning Threshold" "${WARNING_THRESHOLD}%" \
-        "Critical Threshold" "${CRITICAL_THRESHOLD}%" \
-        "Output Format" "$OUTPUT_FORMAT" \
-        "Timeout" "${TIMEOUT}s" \
-        "Show Human Readable" "$SHOW_HUMAN_READABLE" \
-        "Exclude TmpFS" "$EXCLUDE_TMPFS"
-    
-    # Debug output if enabled
-    debug "Full configuration loaded:"
-    debug "  WARNING_THRESHOLD=$WARNING_THRESHOLD"
-    debug "  CRITICAL_THRESHOLD=$CRITICAL_THRESHOLD"
-    debug "  OUTPUT_FORMAT=$OUTPUT_FORMAT"
-    debug "  TIMEOUT=$TIMEOUT"
+    echo "⚙️  配置信息"
+    echo "-" * 30
+    echo "🚨 警告阈值: ${WARNING_THRESHOLD}%"
+    echo "💥 危险阈值: ${CRITICAL_THRESHOLD}%"
+    echo "📋 输出格式: $OUTPUT_FORMAT"
+    echo "⏱️  超时时间: ${TIMEOUT}s"
+    echo "📏 人类可读: $SHOW_HUMAN_READABLE"
+    echo "🚫 排除TmpFS: $EXCLUDE_TMPFS"
+    echo ""
     
     # Get disk usage information
-    step 1 2 "Getting disk usage information"
+    echo "🔍 正在获取磁盘使用信息..."
     local disk_data
     if ! disk_data=$(get_disk_usage); then
-        failure "Failed to get disk usage data"
+        echo "❌ 获取磁盘使用数据失败"
         exit 1
     fi
-    success "Disk usage data retrieved successfully"
+    echo "✅ 磁盘使用数据获取成功"
     
     # Format and display output
-    step 2 2 "Formatting and displaying output"
+    echo "📋 正在格式化并显示输出..."
     format_output "$disk_data"
-    success "Output formatted and displayed"
+    echo "✅ 输出格式化并显示完成"
     
-    # Tool completion
-    operation_complete "Disk Usage Analysis"
+    echo ""
+    echo "✅ 磁盘使用分析完成"
 }
 
 # Handle help flag
 if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
-    section "Disk Usage Analysis Tool Help"
-    info "Usage: $0 [options]"
-    info ""
-    subsection "Environment Variables"
-    info "  WARNING_THRESHOLD    - Warning threshold percentage (default: 80)"
-    info "  CRITICAL_THRESHOLD   - Critical threshold percentage (default: 95)"
-    info "  OUTPUT_FORMAT        - Output format: table, json, csv (default: table)"
-    info "  USE_COLORS          - Enable colored output (default: true)"
-    info "  SHOW_HEADER         - Show table header (default: true)"
-    info "  MAX_ENTRIES         - Maximum entries to display (default: 20)"
-    info "  TIMEOUT             - Command timeout in seconds (default: 10)"
-    info "  DEBUG               - Enable debug output (default: false)"
-    info ""
-    subsection "Global overrides (using DISK_USAGE_ prefix)"
-    info "  DISK_USAGE_WARNING_THRESHOLD=90"
-    info "  DISK_USAGE_OUTPUT_FORMAT=json"
+    echo "📊 磁盘使用分析工具 - 帮助信息"
+    echo "=" * 50
+    echo "用法: $0 [选项]"
+    echo ""
+    echo "环境变量:"
+    echo "  WARNING_THRESHOLD    - 警告阈值百分比 (默认: 80)"
+    echo "  CRITICAL_THRESHOLD   - 危险阈值百分比 (默认: 95)"
+    echo "  OUTPUT_FORMAT        - 输出格式: table, json, csv (默认: table)"
+    echo "  SHOW_HEADER         - 显示表头 (默认: true)"
+    echo "  MAX_ENTRIES         - 最大显示条数 (默认: 20)"
+    echo "  TIMEOUT             - 命令超时秒数 (默认: 10)"
+    echo ""
+    echo "使用示例:"
+    echo "  $0                              # 使用默认设置"
+    echo "  WARNING_THRESHOLD=90 $0         # 自定义警告阈值"
+    echo "  OUTPUT_FORMAT=json $0           # JSON格式输出"
     exit 0
 fi
 
-# Run main function
-main "$@"
+# Run main function with error handling
+if ! main "$@"; then
+    echo "❌ 磁盘使用分析失败"
+    exit 1
+fi

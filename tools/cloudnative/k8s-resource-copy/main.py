@@ -12,31 +12,105 @@ import subprocess
 from typing import Dict, List, Optional, Tuple, Set
 from pathlib import Path
 import tempfile
+import logging
 from dataclasses import dataclass
 
-# Import OpsKit common libraries
-sys.path.insert(0, os.path.join(os.environ['OPSKIT_BASE_PATH'], 'common/python'))
 
-from logger import get_logger
-from storage import get_storage
-from utils import run_command, timestamp, get_env_var
-from interactive import get_interactive
+class _LocalInteractive:
+    """Minimal interactive helper following mysql-sync style (print/input)."""
+    def section(self, title: str):
+        print("\n" + "=" * 80)
+        print(title)
+        print("=" * 80)
+    def subsection(self, title: str):
+        print(f"\n—— {title} ——")
+    def info(self, msg: str):
+        print(msg)
+    def warning_msg(self, msg: str):
+        print(f"⚠️  {msg}")
+    def success(self, msg: str):
+        print(f"✅ {msg}")
+    def failure(self, msg: str):
+        print(f"❌ {msg}")
+    def operation_start(self, title: str, extra: str = ""):
+        print(f"\n🔄 {title} {extra}".rstrip())
+        print("-" * 60)
+    def confirm(self, prompt: str, default: bool = True) -> bool:
+        suffix = "[Y/n]" if default else "[y/N]"
+        try:
+            ans = input(f"{prompt} {suffix}: ").strip().lower()
+            if ans == "":
+                return default
+            return ans in ("y", "yes")
+        except KeyboardInterrupt:
+            print("\n👋 用户取消操作")
+            return False
+    def get_input(self, prompt: str, required: bool = True) -> str:
+        while True:
+            try:
+                val = input(f"{prompt}: ")
+            except KeyboardInterrupt:
+                print("\n👋 用户取消操作")
+                return ""
+            val = val.strip()
+            if val or not required:
+                return val
+            print("输入不能为空，请重试")
 
-# Third-party imports
+# Global interactive instance for module-level usage
+interactive = _LocalInteractive()
+
+# 获取 OpsKit 环境变量
+OPSKIT_TOOL_TEMP_DIR = os.environ.get('OPSKIT_TOOL_TEMP_DIR', os.path.join(os.getcwd(), '.k8s-resource-copy-temp'))
+OPSKIT_BASE_PATH = os.environ.get('OPSKIT_BASE_PATH', os.path.expanduser('~/.opskit'))
+OPSKIT_WORKING_DIR = os.environ.get('OPSKIT_WORKING_DIR', os.getcwd())
+TOOL_NAME = os.environ.get('TOOL_NAME', 'k8s-resource-copy')
+TOOL_VERSION = os.environ.get('TOOL_VERSION', '1.0.0')
+
+# 创建临时目录
+os.makedirs(OPSKIT_TOOL_TEMP_DIR, exist_ok=True)
+
+# Import OpsKit utils (保留基础工具函数)
+try:
+    sys.path.insert(0, os.path.join(OPSKIT_BASE_PATH, 'common/python'))
+    from utils import run_command, get_env_var
+except ImportError:
+    print("⚠️  OpsKit utils 不可用，使用简单实现")
+    # 简单的命令执行函数
+    def run_command(cmd: List[str], timeout: int = 30) -> Tuple[bool, str, str]:
+        """简单的命令执行函数"""
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+            return result.returncode == 0, result.stdout, result.stderr
+        except (subprocess.TimeoutExpired, FileNotFoundError) as e:
+            return False, "", str(e)
+
+    # 简单的环境变量获取函数
+    def get_env_var(name: str, default=None, var_type=str):
+        """获取环境变量"""
+        value = os.environ.get(name, default)
+        if var_type == bool and isinstance(value, str):
+            return value.lower() in ('true', '1', 'yes', 'on')
+        elif var_type == int and isinstance(value, str):
+            try:
+                return int(value)
+            except ValueError:
+                return default
+        return value
+
+# Third-party imports with error handling
 try:
     import colorama
     from colorama import Fore, Back, Style
     colorama.init()
 except ImportError as e:
-    # Use basic logging for dependency errors since interactive isn't available yet
-    print(f"Missing required dependency: {e}")
-    print("Please ensure all dependencies are installed.")
+    print(f"❌ 缺少必需依赖: {e}")
+    print("请确保所有依赖都已安装")
     sys.exit(1)
 
-# Initialize OpsKit components
-logger = get_logger(__name__)
-storage = get_storage('k8s-resource-copy')
-interactive = get_interactive(__name__, 'k8s-resource-copy')
+# Minimal logger setup for parity with mysql-sync style
+logging.basicConfig(level=logging.INFO, format='[%(levelname)s] %(message)s')
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -76,13 +150,18 @@ class KubectlManager:
         
     def check_kubectl(self) -> bool:
         """Check if kubectl is available"""
-        success, stdout, stderr = run_command(['kubectl', 'version', '--client'])
-        if success:
-            self.kubectl_path = 'kubectl'
-            logger.info("✅ kubectl is available")
-            return True
-        else:
-            logger.error("❌ kubectl not found in PATH")
+        try:
+            result = subprocess.run(['kubectl', 'version', '--client'], 
+                                 capture_output=True, text=True, timeout=10)
+            if result.returncode == 0:
+                self.kubectl_path = 'kubectl'
+                print("✅ kubectl 可用")
+                return True
+            else:
+                print("❌ kubectl 未在 PATH 中找到")
+                return False
+        except (subprocess.TimeoutExpired, FileNotFoundError):
+            print("❌ kubectl 未在 PATH 中找到")
             return False
     
     def check_krew(self) -> bool:
@@ -90,10 +169,10 @@ class KubectlManager:
         success, stdout, stderr = run_command(['kubectl', 'krew', 'version'])
         if success:
             self.krew_available = True
-            logger.info("✅ krew is available")
+            print("✅ krew 可用")
             return True
         else:
-            logger.warning("⚠️ krew is not available")
+            print("⚠️  krew 不可用")
             return False
     
     def check_plugins(self) -> Dict[str, bool]:
@@ -155,10 +234,10 @@ class KubectlManager:
             success, stdout, stderr = run_command(['kubectl', 'config', 'use-context', context])
         
         if success:
-            logger.info(f"✅ Switched to context: {context}")
+            print(f"✅ 已切换上下文: {context}")
             return True
         else:
-            logger.error(f"❌ Failed to switch context: {stderr}")
+            print(f"❌ 切换上下文失败: {stderr}")
             return False
     
     def get_namespaces(self, context: str = None) -> List[str]:
@@ -188,7 +267,7 @@ class KubectlManager:
             try:
                 return json.loads(stdout)
             except json.JSONDecodeError:
-                logger.error(f"Failed to parse resource JSON: {resource_type}/{name}")
+                print(f"❌ 解析资源 JSON 失败: {resource_type}/{name}")
         return None
     
     def get_resources_by_type(self, resource_type: str, namespace: str = None) -> List[Dict]:
@@ -203,7 +282,7 @@ class KubectlManager:
                 data = json.loads(stdout)
                 return data.get('items', [])
             except json.JSONDecodeError:
-                logger.error(f"Failed to parse resources JSON: {resource_type}")
+                print(f"❌ 解析 JSON 失败: {resource_type}")
         return []
     
     def export_resource_clean(self, resource_type: str, name: str, namespace: str, output_file: str, target_namespace: str = None) -> bool:
@@ -215,7 +294,7 @@ class KubectlManager:
         
         success, stdout, stderr = run_command(cmd)
         if not success:
-            logger.error(f"Failed to export resource: {stderr}")
+            print(f"❌ 导出资源失败: {stderr}")
             return False
         
         # Apply neat if available
@@ -236,14 +315,14 @@ class KubectlManager:
                 stdout, stderr = neat_process.communicate()
                 
                 if neat_process.returncode != 0:
-                    logger.warning(f"kubectl neat failed, using original output: {stderr}")
+                    print(f"⚠️  kubectl neat 失败，使用原始输出: {stderr}")
                     # Fall back to original output if neat fails
                     success, stdout, stderr = run_command(cmd)
                     if not success:
                         return False
                         
             except Exception as e:
-                logger.warning(f"kubectl neat execution failed, using original output: {e}")
+                print(f"⚠️  kubectl neat 执行失败，使用原始输出: {e}")
                 # Fall back to original output
                 success, stdout, stderr = run_command(cmd)
                 if not success:
@@ -268,7 +347,7 @@ class KubectlManager:
                 f.write(stdout)
             return True
         except Exception as e:
-            logger.error(f"Failed to write resource to file: {e}")
+            print(f"❌ 写入资源到文件失败: {e}")
             return False
     
     def _clean_resource_data(self, resource_data: Dict) -> None:
@@ -311,10 +390,10 @@ class KubectlManager:
         
         success, stdout, stderr = run_command(cmd)
         if success:
-            logger.info(f"✅ Resource applied successfully")
+            print("✅ 资源应用成功")
             return True
         else:
-            logger.error(f"❌ Failed to apply resource: {stderr}")
+            print(f"❌ 应用资源失败: {stderr}")
             return False
 
 
@@ -469,7 +548,8 @@ class ResourceSelector:
     
     def __init__(self):
         self.show_colors = get_env_var('COLOR_OUTPUT', True, bool)
-        self.interactive = get_interactive(__name__, 'k8s-resource-copy')
+        # Build a SimpleInteractive-like local interface using print/input
+        self.interactive = _LocalInteractive()
     
     def select_resources(self, resources: List[K8sResource]) -> List[K8sResource]:
         """Interactive multi-resource selection"""
@@ -640,7 +720,7 @@ class K8sResourceCopyTool:
         # Get OpsKit managed temporary directory
         self.temp_dir = get_env_var('OPSKIT_TOOL_TEMP_DIR')
         if not self.temp_dir:
-            logger.error("OPSKIT_TOOL_TEMP_DIR not available")
+            print("❌ OPSKIT_TOOL_TEMP_DIR 不可用")
             sys.exit(1)
         
         # Initialize components
@@ -657,17 +737,17 @@ class K8sResourceCopyTool:
             'horizontalpodautoscaler'
         ]
         
-        logger.info(f"🚀 Starting {self.tool_name}")
-        logger.info(f"📁 Temporary directory: {self.temp_dir}")
+        print(f"🚀 启动 {self.tool_name}")
+        print(f"📁 临时目录: {self.temp_dir}")
     
     def check_dependencies(self) -> bool:
         """Check if required dependencies are available"""
-        logger.info("🔍 Checking dependencies...")
+        print("🔍 正在检查依赖...")
         
         # Check kubectl
         if not self.kubectl.check_kubectl():
-            interactive.failure("kubectl is required but not found")
-            interactive.info("Please install kubectl: https://kubernetes.io/docs/tasks/tools/")
+            interactive.failure("需要 kubectl，但未找到")
+            interactive.info("请安装 kubectl: https://kubernetes.io/docs/tasks/tools/")
             return False
         
         # Check krew (optional but recommended)
@@ -677,20 +757,20 @@ class K8sResourceCopyTool:
             # Auto-install missing plugins
             for plugin_name, available in plugins.items():
                 if not available:
-                    logger.info(f"Installing missing plugin: {plugin_name}")
+                    print(f"🔧 正在安装缺失插件: {plugin_name}")
                     self.kubectl.install_plugin(plugin_name)
         else:
-            interactive.warning_msg("krew is not installed - some features may be limited")
-            interactive.info("Install krew for enhanced functionality: https://krew.sigs.k8s.io/docs/user-guide/setup/install/")
+            interactive.warning_msg("krew 未安装，部分功能将受限")
+            interactive.info("安装 krew 可获得更多功能: https://krew.sigs.k8s.io/docs/user-guide/setup/install/")
         
         # Verify cluster access
         contexts = self.kubectl.get_contexts()
         if not contexts:
-            interactive.failure("No kubectl contexts found")
-            interactive.info("Please configure kubectl with at least one cluster context")
+            interactive.failure("未找到任何 kubectl 上下文")
+            interactive.info("请至少配置一个集群上下文")
             return False
         
-        logger.info("✅ All required dependencies are available")
+        print("✅ 依赖检查通过")
         return True
     
     def get_source_info(self) -> Tuple[Optional[str], Optional[str]]:
@@ -751,10 +831,10 @@ class K8sResourceCopyTool:
             interactive.warning_msg(f"No resources found in namespace: {namespace}")
             return []
         
-        logger.info(f"Found {len(resources)} resources with relationships")
+        print(f"🔎 发现 {len(resources)} 个资源（含依赖关系）")
         
         # Display discovery summary
-        interactive.subsection("Discovery Summary")
+        interactive.subsection("发现摘要")
         resource_counts = {}
         for resource in resources:
             kind = resource.kind.lower()
@@ -767,7 +847,7 @@ class K8sResourceCopyTool:
     
     def export_resources(self, resources: List[K8sResource], source_context: str, target_namespace: str = None) -> Dict[str, str]:
         """Export selected resources to temporary files"""
-        interactive.operation_start("Resource Export")
+        interactive.operation_start("资源导出")
         
         # Ensure we're in the correct context
         if not self.kubectl.switch_context(source_context):
@@ -784,7 +864,7 @@ class K8sResourceCopyTool:
             filename = f"{resource.kind.lower()}_{resource.name}_{ns_for_filename}.yaml"
             filepath = os.path.join(export_dir, filename)
             
-            logger.info(f"Exporting {resource.full_identifier}")
+            print(f"导出 {resource.full_identifier}")
             
             if self.kubectl.export_resource_clean(
                 resource.kind.lower(), 
@@ -800,12 +880,12 @@ class K8sResourceCopyTool:
             else:
                 interactive.failure(f"Failed to export {resource.full_identifier}")
         
-        logger.info(f"Exported {len(exported_files)} resources to {export_dir}")
+        print(f"已导出 {len(exported_files)} 个资源到 {export_dir}")
         return exported_files
     
     def preview_changes(self, exported_files: Dict[str, str], target_namespace: str) -> bool:
         """Preview changes that will be applied"""
-        interactive.subsection("Resource Preview")
+        interactive.subsection("资源预览")
         
         for identifier, filepath in exported_files.items():
             interactive.info(f"\nResource: {identifier}")
@@ -821,29 +901,29 @@ class K8sResourceCopyTool:
                     if len(lines) >= 10:
                         interactive.info("  ...")
             except Exception as e:
-                interactive.warning_msg(f"Error reading file: {e}")
+                interactive.warning_msg(f"读取文件失败: {e}")
         return True
     
     def confirm_operation(self, resources: List[K8sResource], source_context: str, 
                          source_namespace: str, target_context: str, target_namespace: str) -> bool:
         """Get user confirmation for the copy operation"""
-        interactive.warning_msg("CONFIRMATION REQUIRED")
-        interactive.info(f"Source: {source_context}/{source_namespace}")
-        interactive.info(f"Target: {target_context}/{target_namespace}")
-        interactive.info(f"Resources to copy: {len(resources)}")
+        interactive.warning_msg("需要确认")
+        interactive.info(f"源: {source_context}/{source_namespace}")
+        interactive.info(f"目标: {target_context}/{target_namespace}")
+        interactive.info(f"待复制资源数: {len(resources)}")
         
-        interactive.info("\nResources:")
+        interactive.info("\n资源列表:")
         for resource in resources:
             interactive.info(f"  • {resource.full_identifier}")
         
-        interactive.warning_msg("This operation will apply resources to the target cluster.")
-        interactive.warning_msg("Existing resources with the same name may be modified.")
+        interactive.warning_msg("此操作将向目标集群应用资源")
+        interactive.warning_msg("同名资源可能被修改")
         
-        confirmation = interactive.get_input(
-            "Type 'YES' to confirm this operation",
-            validator=lambda x: x == 'YES'
-        )
-        
+        try:
+            confirmation = input("输入 'YES' 确认执行: ").strip()
+        except KeyboardInterrupt:
+            print("\n👋 用户取消操作")
+            return False
         return confirmation == 'YES'
     
     def apply_resources(self, exported_files: Dict[str, str], target_context: str, 
@@ -851,7 +931,7 @@ class K8sResourceCopyTool:
         """Apply resources to target cluster"""
         # Switch to target context
         if not self.kubectl.switch_context(target_context):
-            logger.error(f"Failed to switch to target context: {target_context}")
+            print(f"❌ 切换到目标上下文失败: {target_context}")
             return False
         
         mode = "dry-run" if dry_run else "apply"
@@ -861,7 +941,7 @@ class K8sResourceCopyTool:
         total_count = len(exported_files)
         
         for identifier, filepath in exported_files.items():
-            logger.info(f"Applying {identifier}")
+            print(f"应用 {identifier}")
             
             if self.kubectl.apply_resource(filepath, None, dry_run):
                 success_count += 1
@@ -869,11 +949,11 @@ class K8sResourceCopyTool:
             else:
                 interactive.failure(f"Failed to apply {identifier}")
         
-        interactive.info(f"\nResults: {success_count}/{total_count} resources processed successfully")
+        interactive.info(f"\n结果: {success_count}/{total_count} 个资源处理成功")
         
         if dry_run and success_count > 0:
-            interactive.info("This was a dry-run. No changes were applied.")
-            apply_for_real = interactive.confirm("Apply resources for real?", default=False)
+            interactive.info("当前为 dry-run，未对集群做出更改")
+            apply_for_real = interactive.confirm("是否正式应用资源?", default=False)
             
             if apply_for_real:
                 return self.apply_resources(exported_files, target_context, target_namespace, dry_run=False)
@@ -883,15 +963,15 @@ class K8sResourceCopyTool:
     def cleanup_temp_files(self):
         """Clean up temporary files"""
         if self.temp_dir_cleanup:
-            logger.info("🧹 Cleaning up temporary files...")
+            print("🧹 清理临时文件...")
             try:
                 import shutil
                 export_dir = os.path.join(self.temp_dir, 'exported_resources')
                 if os.path.exists(export_dir):
                     shutil.rmtree(export_dir)
-                    logger.info("✅ Temporary files cleaned up")
+                    print("✅ 临时文件已清理")
             except Exception as e:
-                logger.warning(f"⚠️ Failed to clean up temporary files: {e}")
+                print(f"⚠️  清理临时文件失败: {e}")
     
     def run(self):
         """Main tool execution"""
@@ -905,29 +985,29 @@ class K8sResourceCopyTool:
             # Get source information
             source_context, source_namespace = self.get_source_info()
             if not source_context or not source_namespace:
-                logger.error("Source selection cancelled")
+                print("❌ 源信息选择已取消")
                 return
             
             # Discover and select resources
             resources = self.discover_and_select_resources(source_namespace)
             if not resources:
-                logger.info("No resources selected for copying")
+                print("ℹ️ 未选择需要复制的资源")
                 return
             
             if len(resources) > self.max_resources_per_batch:
-                logger.error(f"Too many resources selected ({len(resources)} > {self.max_resources_per_batch})")
+                print(f"❌ 选择的资源过多 ({len(resources)} > {self.max_resources_per_batch})")
                 return
             
             # Get target information
             target_context, target_namespace = self.get_target_info()
             if not target_context or not target_namespace:
-                logger.error("Target selection cancelled")
+                print("❌ 目标信息选择已取消")
                 return
             
             # Export resources
             exported_files = self.export_resources(resources, source_context, target_namespace)
             if not exported_files:
-                logger.error("Failed to export resources")
+                print("❌ 导出资源失败")
                 return
             
             # Preview changes
@@ -936,7 +1016,7 @@ class K8sResourceCopyTool:
             # Get confirmation
             if not self.confirm_operation(resources, source_context, source_namespace, 
                                         target_context, target_namespace):
-                logger.info("Operation cancelled by user")
+                print("👋 用户取消操作")
                 return
             
             # Apply resources (with dry-run by default)
@@ -944,18 +1024,18 @@ class K8sResourceCopyTool:
                                          dry_run=self.dry_run_default)
             
             if success:
-                logger.info("✅ Resource copy operation completed successfully")
-                interactive.success("Operation completed successfully!")
+                print("✅ 资源复制操作完成")
+                interactive.success("操作成功！")
             else:
-                logger.error("❌ Resource copy operation completed with errors")
-                interactive.failure("Operation completed with errors")
+                print("❌ 资源复制操作存在失败")
+                interactive.failure("操作存在失败")
             
         except KeyboardInterrupt:
-            logger.info("❌ Operation cancelled by user")
+            print("\n👋 用户取消操作")
             interactive.user_cancelled()
         except Exception as e:
-            logger.error(f"❌ Unexpected error: {e}")
-            interactive.failure(f"Unexpected error: {e}")
+            print(f"\n❌ 程序错误: {e}")
+            interactive.failure(f"程序错误: {e}")
             sys.exit(1)
         finally:
             # Cleanup temporary files

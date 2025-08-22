@@ -1,16 +1,1 @@
-# MySQL-Sync Tool Dependencies
-
-# Database connectivity
-pymysql>=1.0.0
-
-# CLI interface
-click>=8.0.0
-
-# Cross-platform colored terminal output
-colorama>=0.4.4
-
-# Configuration file handling
-PyYAML>=6.0
-
-# Optional: Rich console output (fallback handled in code)
-rich>=12.0.0
+pymysql>=1.0.2

@@ -20,9 +20,7 @@ import logging
 
 from .platform_utils import PlatformUtils
 
-# Import interactive components for loading effects
-sys.path.insert(0, os.path.join(os.environ.get('OPSKIT_BASE_PATH', ''), 'common/python'))
-from interactive import loading_spinner, progress_tracker
+# Note: Interactive functionality removed - tools should implement their own UI
 
 
 class DependencyManager:
@@ -80,37 +78,49 @@ class DependencyManager:
         tool_path = Path(tool_info['path'])
         
         try:
-            with loading_spinner(f"Checking dependencies for {tool_name}") as spinner:
-                
-                # Check Python dependencies
-                if tool_info.get('has_python_deps', False):
-                    self.logger.info(f"🔍 Checking Python dependencies for {tool_name}")
-                    success, message = self._ensure_python_dependencies(tool_name, tool_path)
-                    if not success:
-                        spinner.stop("❌ Python dependencies failed")
-                        return False, f"Python dependencies failed: {message}"
-                    else:
-                        self.logger.info(f"✅ Python dependencies satisfied for {tool_name}")
-                
-                # Check and install system dependencies
-                self.logger.info(f"🔍 Checking system dependencies for {tool_name}")
-                missing_deps = self._check_system_dependencies(tool_info)
-                if missing_deps:
-                    self.logger.warning(f"⚠️  Missing system dependencies: {', '.join(missing_deps)}")
-                    # Try to install missing dependencies
-                    installed, failed = self._install_system_dependencies(missing_deps)
-                    if failed:
-                        spinner.stop("❌ System dependencies failed")
-                        return False, f"Missing system dependencies: {', '.join(failed)}"
-                    else:
-                        self.logger.info(f"✅ System dependencies installed: {', '.join(installed)}")
+            # Start check message; append status at the end of the same line
+            print(f"Checking dependencies for {tool_name}...", end="", flush=True)
+            
+            # Check Python dependencies
+            if tool_info.get('has_python_deps', False):
+                self.logger.info(f"🔍 Checking Python dependencies for {tool_name}")
+                success, message = self._ensure_python_dependencies(tool_name, tool_path)
+                if not success:
+                    print(" ❌")
+                    print()  # empty line after completion
+                    print("❌ Python dependencies failed")
+                    return False, f"Python dependencies failed: {message}"
+            else:
+                self.logger.info(f"✅ Python dependencies satisfied for {tool_name}")
+            
+            # Check and install system dependencies
+            self.logger.info(f"🔍 Checking system dependencies for {tool_name}")
+            missing_deps = self._check_system_dependencies(tool_info)
+            if missing_deps:
+                self.logger.warning(f"⚠️  Missing system dependencies: {', '.join(missing_deps)}")
+                # Try to install missing dependencies
+                installed, failed = self._install_system_dependencies(missing_deps)
+                if failed:
+                    print(" ❌")
+                    print()  # empty line after completion
+                    print("❌ System dependencies failed")
+                    return False, f"Missing system dependencies: {', '.join(failed)}"
                 else:
-                    self.logger.info(f"✅ All system dependencies satisfied for {tool_name}")
-                
-                spinner.stop("✅ All dependencies satisfied")
-                return True, "All dependencies satisfied"
-        
+                    self.logger.info(f"✅ System dependencies installed: {', '.join(installed)}")
+            else:
+                self.logger.info(f"✅ All system dependencies satisfied for {tool_name}")
+            
+            print(" ✅")
+            print()  # empty line after completion
+            return True, "All dependencies satisfied"
+
         except Exception as e:
+            # Ensure we end the status line with failure mark
+            try:
+                print(" ❌")
+                print()  # empty line after completion
+            except Exception:
+                pass
             self.logger.error(f"❌ Dependency check failed for {tool_name}: {e}")
             return False, f"Dependency check failed: {e}"
     
@@ -124,31 +134,31 @@ class DependencyManager:
         try:
             # Create shared virtual environment if it doesn't exist
             if not self.shared_venv.exists():
-                with loading_spinner("Creating shared virtual environment") as spinner:
-                    self.logger.info("📦 Creating shared virtual environment...")
+                print("Creating shared virtual environment...")
+                self.logger.info("📦 Creating shared virtual environment...")
+                
+                try:
+                    venv.create(self.shared_venv, with_pip=True, clear=True)
+                    print("✅ Shared virtual environment created")
+                    self.logger.info("✅ Shared virtual environment created successfully")
                     
-                    try:
-                        venv.create(self.shared_venv, with_pip=True, clear=True)
-                        spinner.stop("✅ Shared virtual environment created")
-                        self.logger.info("✅ Shared virtual environment created successfully")
-                        
-                        # Upgrade pip in new environment
-                        pip_exe = self._get_pip_executable()
-                        if pip_exe:
-                            self.logger.info("📦 Upgrading pip in virtual environment...")
-                            result = subprocess.run(
-                                [str(pip_exe), 'install', '--upgrade', 'pip'],
-                                capture_output=True,
-                                timeout=60
-                            )
-                            if result.returncode == 0:
-                                self.logger.info("✅ Pip upgraded successfully")
-                            else:
-                                self.logger.warning(f"⚠️  Pip upgrade failed: {result.stderr}")
-                    except Exception as e:
-                        spinner.stop("❌ Failed to create virtual environment")
-                        self.logger.error(f"❌ Failed to create virtual environment: {e}")
-                        raise
+                    # Upgrade pip in new environment
+                    pip_exe = self._get_pip_executable()
+                    if pip_exe:
+                        self.logger.info("📦 Upgrading pip in virtual environment...")
+                        result = subprocess.run(
+                            [str(pip_exe), 'install', '--upgrade', 'pip'],
+                            capture_output=True,
+                            timeout=60
+                        )
+                        if result.returncode == 0:
+                            self.logger.info("✅ Pip upgraded successfully")
+                        else:
+                            self.logger.warning(f"⚠️  Pip upgrade failed: {result.stderr}")
+                except Exception as e:
+                    print("❌ Failed to create virtual environment")
+                    self.logger.error(f"❌ Failed to create virtual environment: {e}")
+                    raise
             
             # Check if dependencies are already satisfied
             if self._are_python_deps_satisfied(tool_name, requirements_file):
@@ -415,17 +425,17 @@ class DependencyManager:
         
         installed, failed = [], []
         
-        with progress_tracker(len(missing_deps), "Installing system dependencies") as tracker:
-            for i, dep_name in enumerate(missing_deps):
-                tracker.update(f"Installing {dep_name}")
-                self.logger.info(f"📦 Installing dependency {i+1}/{len(missing_deps)}: {dep_name}")
-                
-                if self._install_dependency(dep_name):
-                    installed.append(dep_name)
-                    self.logger.info(f"✅ Successfully installed {dep_name}")
-                else:
-                    failed.append(dep_name)
-                    self.logger.warning(f"❌ Failed to install {dep_name}")
+        print(f"Installing {len(missing_deps)} system dependencies...")
+        for i, dep_name in enumerate(missing_deps):
+            print(f"Installing {dep_name}...")
+            self.logger.info(f"📦 Installing dependency {i+1}/{len(missing_deps)}: {dep_name}")
+            
+            if self._install_dependency(dep_name):
+                installed.append(dep_name)
+                self.logger.info(f"✅ Successfully installed {dep_name}")
+            else:
+                failed.append(dep_name)
+                self.logger.warning(f"❌ Failed to install {dep_name}")
         
         if installed:
             self.logger.info(f"✅ Successfully installed {len(installed)} dependencies: {', '.join(installed)}")

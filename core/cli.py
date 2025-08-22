@@ -1,66 +1,41 @@
 """
 CLI Module
 
-Interactive command line interface for OpsKit including:
-- Interactive tool browsing and selection
-- Tool configuration management
-- System status display and health checking
-- Git-based updates and maintenance
+Simple command line interface for OpsKit providing:
+- Tool discovery and listing
+- Basic tool execution
+- Configuration management
+- System updates
 """
 
 import os
 import sys
 import subprocess
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
 from pathlib import Path
 
 try:
     from rich.console import Console
     from rich.table import Table
     from rich.panel import Panel
-    from rich.text import Text
     from rich.prompt import Prompt, Confirm
-    from rich.progress import track
     from rich.align import Align
     rich_available = True
 except ImportError:
     rich_available = False
 
-try:
-    from prompt_toolkit import prompt
-    from prompt_toolkit.application import Application
-    from prompt_toolkit.key_binding import KeyBindings
-    from prompt_toolkit.layout import Layout, HSplit, VSplit
-    from prompt_toolkit.layout.containers import Window
-    from prompt_toolkit.layout.controls import BufferControl, FormattedTextControl
-    from prompt_toolkit.buffer import Buffer
-    from prompt_toolkit.widgets import SearchToolbar, Frame
-    from prompt_toolkit.styles import Style
-    from prompt_toolkit.formatted_text import FormattedText
-    from prompt_toolkit.filters import Condition
-    import threading
-    import time
-    prompt_toolkit_available = True
-except ImportError:
-    prompt_toolkit_available = False
-
 from .env import env, get_tool_temp_dir, load_tool_env, get_config_summary, is_first_run, initialize_env_file
 from .platform_utils import PlatformUtils
 from .dependency_manager import DependencyManager
-from .theme import theme_manager
 import yaml
 
 
 class OpsKitCLI:
-    """Interactive command line interface for OpsKit"""
+    """Simple command line interface for OpsKit"""
     
     def __init__(self):
         """Initialize CLI interface"""
         self.console = Console() if rich_available else None
-        
-        # Set up logging
-        import logging
-        self.logger = logging.getLogger(__name__)
         
         # Get OpsKit root directory
         current_file = Path(__file__).resolve()
@@ -69,8 +44,6 @@ class OpsKitCLI:
         
         # Tool cache
         self._tool_cache = None
-        self._tool_categories = None
-        self._yaml_tools = None
         
         # Initialize managers
         self.platform_utils = PlatformUtils()
@@ -246,240 +219,27 @@ class OpsKitCLI:
                 'dependencies': dependencies
             }
         
-        except Exception as e:
-            self.logger.debug(f"Error parsing tool {tool_dir}: {e}")
+        except Exception:
             return None
     
     def interactive_mode(self) -> None:
-        """Enter interactive CLI mode with list view, pagination and real-time search"""
-        if not prompt_toolkit_available:
-            self._print("Error: prompt_toolkit is required for interactive mode.", "red")
-            self._print("Please install it with: pip install prompt-toolkit", "yellow")
-            return
-        
-        # Check if this is first run - if so, go directly to initial setup
+        """Simple interactive mode - just show available tools and let user pick one"""
+        # Check if this is first run
         if is_first_run():
             self._print("Welcome to OpsKit! 🚀", "bold green")
             self._print("Let's set up your configuration first.", "yellow")
             success = self.initial_setup()
             if not success:
-                self._print("Setup cancelled. You can run settings later with Ctrl+S.", "yellow")
+                self._print("Setup cancelled. You can configure later with: opskit config", "yellow")
                 return
+
+        # Show available tools
+        self._print("Available tools:", "bold blue")
+        self.list_tools()
         
-        # Load and prepare tools
-        tools = self.discover_tools()
-        if not tools:
-            self._print("No tools found. Please check your OpsKit installation.", "yellow")
-            return
-        
-        # Flatten and sort tools by name
-        all_tools = []
-        for category, cat_tools in tools.items():
-            for tool in cat_tools:
-                tool['full_name'] = f"{tool['name']} ({tool['category']})"
-                all_tools.append(tool)
-        
-        all_tools.sort(key=lambda x: x['name'])
-        
-        # Application state
-        class AppState:
-            def __init__(self):
-                self.tools = all_tools
-                self.filtered_tools = all_tools[:]
-                self.selected_index = 0
-                self.page_size = 10
-                self.current_page = 0
-                self.search_text = ""
-                self.show_help = False
-        
-        state = AppState()
-        
-        # Search buffer
-        search_buffer = Buffer()
-        
-        def filter_tools():
-            """Filter tools based on search text"""
-            search_term = search_buffer.text.lower()
-            if not search_term:
-                state.filtered_tools = state.tools[:]
-            else:
-                state.filtered_tools = [
-                    tool for tool in state.tools
-                    if (search_term in tool['name'].lower() or 
-                        search_term in tool['description'].lower() or
-                        search_term in tool['category'].lower())
-                ]
-            
-            # Reset selection
-            state.selected_index = 0
-            state.current_page = 0
-        
-        def get_tool_list_text():
-            """Generate formatted tool list"""
-            if not state.filtered_tools:
-                return FormattedText([('class:no-results', 'No tools found')])
-            
-            start_idx = state.current_page * state.page_size
-            end_idx = min(start_idx + state.page_size, len(state.filtered_tools))
-            page_tools = state.filtered_tools[start_idx:end_idx]
-            
-            result = []
-            
-            # Header info
-            total_tools = len(state.filtered_tools)
-            current_page_num = state.current_page + 1
-            total_pages = (total_tools + state.page_size - 1) // state.page_size
-            
-            result.append(('class:header', f'OpsKit Tools ({total_tools} found) - Page {current_page_num}/{total_pages}\n'))
-            result.append(('class:separator', '-' * 80 + '\n'))
-            
-            # Tool list
-            for i, tool in enumerate(page_tools):
-                global_idx = start_idx + i
-                prefix = '> ' if global_idx == state.selected_index else '  '
-                style = 'class:selected' if global_idx == state.selected_index else 'class:normal'
-                
-                # Format: > name (category) - description
-                name_part = f"{prefix}{tool['name']}"
-                category_part = f" ({tool['category']})"
-                desc_part = f" - {tool['description'][:50]}{'...' if len(tool['description']) > 50 else ''}"
-                
-                result.extend([
-                    (style, name_part),
-                    ('class:category', category_part),
-                    ('class:description', desc_part),
-                    ('', '\n')
-                ])
-            
-            # Footer with keybindings
-            result.append(('class:separator', '-' * 80 + '\n'))
-            result.extend([
-                ('class:keybind', '↑↓: Navigate  '),
-                ('class:keybind', 'PgUp/PgDn: Page  '),
-                ('class:keybind', 'Enter: Select  '),
-                ('class:keybind', 'Ctrl+S: Settings  '),
-                ('class:keybind', 'Ctrl+C: Exit')
-            ])
-            
-            return FormattedText(result)
-        
-        # Key bindings
-        kb = KeyBindings()
-        
-        @kb.add('up')
-        def move_up(event):
-            if state.selected_index > 0:
-                state.selected_index -= 1
-                # Check if we need to go to previous page
-                if state.selected_index < state.current_page * state.page_size:
-                    state.current_page -= 1
-        
-        @kb.add('down')
-        def move_down(event):
-            if state.selected_index < len(state.filtered_tools) - 1:
-                state.selected_index += 1
-                # Check if we need to go to next page
-                if state.selected_index >= (state.current_page + 1) * state.page_size:
-                    state.current_page += 1
-        
-        @kb.add('pageup')
-        def page_up(event):
-            if state.current_page > 0:
-                state.current_page -= 1
-                state.selected_index = min(state.selected_index, 
-                                          (state.current_page + 1) * state.page_size - 1)
-        
-        @kb.add('pagedown')
-        def page_down(event):
-            max_page = (len(state.filtered_tools) - 1) // state.page_size
-            if state.current_page < max_page:
-                state.current_page += 1
-                state.selected_index = max(state.selected_index,
-                                          state.current_page * state.page_size)
-        
-        @kb.add('enter')
-        def select_tool(event):
-            if state.filtered_tools and 0 <= state.selected_index < len(state.filtered_tools):
-                selected_tool = state.filtered_tools[state.selected_index]
-                event.app.exit(result=selected_tool)
-        
-        @kb.add('c-s')
-        def show_settings(event):
-            event.app.exit(result='settings')
-        
-        @kb.add('c-c')
-        def exit_app(event):
-            event.app.exit(result='exit')
-        
-        @kb.add('?')
-        def toggle_help(event):
-            state.show_help = not state.show_help
-        
-        # Update search when buffer changes
-        def on_search_buffer_change(buffer):
-            filter_tools()
-        
-        search_buffer.on_text_changed += on_search_buffer_change
-        
-        # Layout
-        search_field = Window(
-            BufferControl(buffer=search_buffer),
-            height=1,
-            wrap_lines=False,
-        )
-        
-        tool_list_window = Window(
-            FormattedTextControl(
-                get_tool_list_text,
-                focusable=True,
-                show_cursor=False,
-            ),
-            wrap_lines=False,
-        )
-        
-        root_container = HSplit([
-            Window(
-                FormattedTextControl(FormattedText([('class:title', 'OpsKit - Unified Operations Management')])),
-                height=1
-            ),
-            Window(
-                FormattedTextControl(FormattedText([('class:search-label', 'Search: ')])),
-                height=1
-            ),
-            search_field,
-            Window(height=1),  # Separator
-            tool_list_window,
-        ])
-        
-        # Style - use theme manager for adaptive colors
-        style = theme_manager.get_style(env.ui_theme)
-        
-        # Create and run application
-        app = Application(
-            layout=Layout(root_container),
-            key_bindings=kb,
-            style=style,
-            full_screen=True,
-        )
-        
-        try:
-            result = app.run()
-            
-            if result == 'exit':
-                self._print("Goodbye!", "green")
-            elif result == 'settings':
-                self.configuration_menu()
-            elif isinstance(result, dict):  # Selected tool
-                # Directly run the tool instead of showing details
-                tool_name = result['name']
-                exit_code = self.run_tool(tool_name)
-                if exit_code == 0:
-                    self._print(f"\n{tool_name} completed successfully", "green")
-                else:
-                    self._print(f"\n{tool_name} exited with code {exit_code}", "yellow")
-        
-        except KeyboardInterrupt:
-            self._print("\nGoodbye!", "green")
+        self._print("\nUse 'opskit run <tool-name>' to run a specific tool", "yellow")
+        self._print("Use 'opskit list' to see this list again", "yellow")
+        self._print("Use 'opskit config' for configuration", "yellow")
     
     def list_tools(self, category: Optional[str] = None) -> None:
         """List all tools or tools in a specific category"""
@@ -570,13 +330,6 @@ class OpsKitCLI:
             env_vars['TOOL_NAME'] = found_tool.get('display_name', found_tool['name'])
             env_vars['TOOL_VERSION'] = tool_version
             
-            if env_vars:
-                self.logger.debug(f"Loaded {len(env_vars)} environment variables")
-                for key, value in list(env_vars.items())[:5]:  # Show first 5
-                    self.logger.debug(f"  {key}={value}")
-                if len(env_vars) > 5:
-                    self.logger.debug(f"  ... and {len(env_vars) - 5} more")
-            
             # Set environment variables in current process
             for key, value in env_vars.items():
                 os.environ[key] = str(value)
@@ -586,7 +339,6 @@ class OpsKitCLI:
             
         except Exception as e:
             self._print(f"❌ Error running tool: {e}", "red")
-            self.logger.debug("Full traceback:", exc_info=True)
             return 1
     
     def search_tools(self, query: str) -> None:
@@ -670,66 +422,19 @@ class OpsKitCLI:
             self._print("\n⚙️  Settings Configuration", "bold cyan")
             self._print("Update your OpsKit settings:", "dim")
         
-        # Get current values (defaults for first run, current values for settings)
-        if is_first_run_setup:
-            current_log_enabled = True  # Default for first run
-            current_theme = 'auto'      # Default for first run
-        else:
-            current_log_enabled = env.log_file_enabled
-            current_theme = env.ui_theme
+        # Basic setup - no complex configuration needed
         
-        # 1. Ask about file logging
-        self._print("\n1. Logging Configuration", "bold yellow")
-        if not is_first_run_setup:
-            self._print(f"   Current: File logging is {'enabled' if current_log_enabled else 'disabled'}", "dim")
-        
-        log_to_file = self._confirm(
-            "Save logs to file? (recommended for debugging)", 
-            current_log_enabled
-        )
-        
-        # 2. Ask about theme
-        self._print("\n2. Theme Configuration", "bold yellow")
-        if not is_first_run_setup:
-            theme_info = theme_manager.get_theme_info(current_theme)
-            self._print(f"   Current: {current_theme} (active: {theme_info['active_theme']})", "dim")
-        
-        self._print("Theme options:")
-        self._print("  auto  - automatically detect terminal background")
-        self._print("  light - for light terminal backgrounds")
-        self._print("  dark  - for dark terminal backgrounds")
-        
-        theme_choice = self._input("Choose theme", current_theme).lower()
-        if theme_choice not in ['auto', 'light', 'dark']:
-            theme_choice = current_theme
-        
-        # 3. Save configuration
+        # Save basic configuration
         action_text = "Creating" if is_first_run_setup else "Updating"
         self._print(f"\n📝 {action_text} configuration...", "blue")
-        success = initialize_env_file(log_to_file=log_to_file, theme=theme_choice)
+        success = initialize_env_file()
         
         if success:
             self._print(f"✅ Configuration {action_text.lower()} successfully!", "green")
-            self._print(f"  - File logging: {'enabled' if log_to_file else 'disabled'}")
-            self._print(f"  - Theme: {theme_choice}")
             self._print(f"  - Config file: data/.env")
             
-            if not is_first_run_setup:
-                # Show what changed
-                changes = []
-                if log_to_file != current_log_enabled:
-                    changes.append(f"file logging: {current_log_enabled} → {log_to_file}")
-                if theme_choice != current_theme:
-                    changes.append(f"theme: {current_theme} → {theme_choice}")
-                
-                if changes:
-                    self._print(f"\nChanges made:", "yellow")
-                    for change in changes:
-                        self._print(f"  - {change}")
-                else:
-                    self._print("No changes made.", "dim")
-            else:
-                self._print("\nYou can access settings later with Ctrl+S", "dim")
+            if is_first_run_setup:
+                self._print("\nYou can access settings later with: opskit config", "dim")
             
             return True
         else:
@@ -742,26 +447,16 @@ class OpsKitCLI:
     
     def configuration_menu(self) -> None:
         """Configuration management menu"""
-        # Show current configuration first
-        theme_info = theme_manager.get_theme_info(env.ui_theme)
-        
+        # Show current configuration
         config_info = f"Current Settings:\n"
         config_info += f"  Version: {env.version}\n"
-        config_info += f"  File Logging: {'enabled' if env.log_file_enabled else 'disabled'}\n"
-        config_info += f"  Theme: {env.ui_theme} (active: {theme_info['active_theme']})\n"
-        config_info += f"  Detected Background: {theme_info['detected_background']}\n"
-        
-        # Show macOS-specific info if available
-        if 'macos_appearance' in theme_info and theme_info['macos_appearance'] != 'unknown':
-            config_info += f"  macOS System: {theme_info['macos_appearance']} mode\n"
-        
-        config_info += f"\nConfiguration file: data/.env"
+        config_info += f"  Cache Directory: {env.cache_dir}\n"
+        config_info += f"  Configuration file: data/.env"
         
         self._print_panel(config_info, "📋 Current Configuration", "cyan")
         
         # Ask if user wants to modify settings
         if self._confirm("Modify settings?", False):
-            # Use the same settings wizard
             self.settings_wizard(is_first_run_setup=False)
     
     def update_opskit(self) -> None:
@@ -797,6 +492,37 @@ class OpsKitCLI:
                 self._print("Update timed out. Please try again.", "red")
             except Exception as e:
                 self._print(f"Update error: {e}", "red")
+    
+    def generate_completion(self, shell: str) -> None:
+        """Generate shell completion script using Click's built-in functionality"""
+        from pathlib import Path
+        
+        # Get the absolute path to the opskit script
+        opskit_path = Path(__file__).parent.parent / "bin" / "opskit"
+        
+        if shell == 'bash':
+            print(f"""# OpsKit Bash completion
+# Add this to your ~/.bashrc:
+# eval "$(_OPSKIT_COMPLETE=bash_source opskit)"
+
+eval "$(_OPSKIT_COMPLETE=bash_source {opskit_path})"
+""")
+        
+        elif shell == 'zsh':
+            print(f"""# OpsKit Zsh completion  
+# Add this to your ~/.zshrc:
+# eval "$(_OPSKIT_COMPLETE=zsh_source opskit)"
+
+eval "$(_OPSKIT_COMPLETE=zsh_source {opskit_path})"
+""")
+        
+        elif shell == 'fish':
+            print(f"""# OpsKit Fish completion
+# Add this to ~/.config/fish/completions/opskit.fish:
+# eval (env _OPSKIT_COMPLETE=fish_source opskit)
+
+eval (env _OPSKIT_COMPLETE=fish_source {opskit_path})
+""")
     
     def _show_help(self) -> None:
         """Show help information"""

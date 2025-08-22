@@ -41,10 +41,38 @@ OpsKit is a modern CLI tool that unifies operational utilities into a single, ea
    ```
 
 4. **Reload your shell** and start using:
-   ```bash
-   source ~/.bashrc  # or ~/.zshrc
-   opskit
-   ```
+  ```bash
+  source ~/.bashrc  # or ~/.zshrc
+  opskit
+  ```
+
+### Optional: Shell Completion
+
+Enable auto-completion for `opskit` commands:
+
+- Bash:
+  ```bash
+  # Append once, then reload
+  opskit completion bash >> ~/.bashrc
+  source ~/.bashrc
+  ```
+
+- Zsh:
+  ```bash
+  # Enable for current session
+  source <(opskit completion zsh)
+
+  # Enable automatically in new shells
+  echo 'source <(opskit completion zsh)' >> ~/.zshrc
+  ```
+
+- Fish:
+  ```bash
+  mkdir -p ~/.config/fish/completions
+  opskit completion fish > ~/.config/fish/completions/opskit.fish
+  ```
+
+If you relocate OpsKit, re-run the command to refresh the completion script.
 
 ### First Run
 

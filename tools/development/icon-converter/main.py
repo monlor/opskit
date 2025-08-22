@@ -13,25 +13,132 @@ from pathlib import Path
 import concurrent.futures
 from datetime import datetime
 
-# Import OpsKit common libraries
-sys.path.insert(0, os.path.join(os.environ['OPSKIT_BASE_PATH'], 'common/python'))
+# Basic interactive helpers (replacing removed interactive/get_input utilities)
+def get_input(prompt: str, validator=None, required: bool = True) -> str:
+    """Prompt user for input with optional validator.
+    - validator: callable that returns True/False for validity
+    - required: if True, reprompt until non-empty
+    Returns the raw input string.
+    """
+    while True:
+        try:
+            val = input(f"{prompt}").strip()
+        except KeyboardInterrupt:
+            print("\n👋 用户取消操作")
+            return ""
+        if not val and required:
+            print("❌ 输入不能为空，请重试")
+            continue
+        if validator and val:
+            try:
+                if not validator(val):
+                    print("❌ 输入无效，请重试")
+                    continue
+            except Exception:
+                print("❌ 校验失败，请重试")
+                continue
+        return val
 
-from logger import get_logger
-from storage import get_storage
-from utils import run_command, timestamp, get_env_var
-from interactive import get_input, confirm, select_from_list, select_multiple_from_list, delete_confirm
+def confirm(prompt: str, default: bool = True) -> bool:
+    suffix = "[Y/n]" if default else "[y/N]"
+    try:
+        ans = input(f"{prompt} {suffix} ").strip().lower()
+    except KeyboardInterrupt:
+        print("\n👋 用户取消操作")
+        return False
+    if ans == "":
+        return default
+    return ans in ("y", "yes")
+
+def select_from_list(options: List[str], prompt: str) -> Optional[int]:
+    """Display numbered options and return selected index (0-based)."""
+    if not options:
+        print("❌ 没有可选项")
+        return None
+    for i, opt in enumerate(options, 1):
+        print(f"{i}. {opt}")
+    while True:
+        try:
+            choice = input(f"{prompt} ").strip()
+        except KeyboardInterrupt:
+            print("\n👋 用户取消操作")
+            return None
+        if not choice:
+            return None
+        if not choice.isdigit():
+            print("❌ 请输入有效数字")
+            continue
+        idx = int(choice) - 1
+        if 0 <= idx < len(options):
+            return idx
+        print("❌ 选择超出范围")
+
+def select_multiple_from_list(options: List[str], prompt: str) -> List[int]:
+    """Allow user to select multiple indices. Supports formats: '1', '1,3,5', '2-6', 'all'."""
+    if not options:
+        return []
+    for i, opt in enumerate(options, 1):
+        print(f"{i}. {opt}")
+    selected = set()
+    print("提示: 输入编号切换选择，范围如 2-5，多个如 1,3,5，输入 all 全选，done 完成")
+    while True:
+        try:
+            choice = input(f"{prompt} ").strip().lower()
+        except KeyboardInterrupt:
+            print("\n👋 用户取消操作")
+            return sorted(selected)
+        if not choice:
+            return sorted(selected)
+        if choice == 'done':
+            return sorted(selected)
+        if choice == 'all':
+            return list(range(len(options)))
+        if '-' in choice:
+            try:
+                start, end = map(int, choice.split('-'))
+                selected.update(range(start - 1, end))
+                continue
+            except Exception:
+                print("❌ 范围格式无效")
+                continue
+        if ',' in choice:
+            try:
+                indices = [int(x.strip()) - 1 for x in choice.split(',')]
+            except Exception:
+                print("❌ 多选格式无效")
+                continue
+            for idx in indices:
+                if 0 <= idx < len(options):
+                    selected.symmetric_difference_update({idx})
+            continue
+        if choice.isdigit():
+            idx = int(choice) - 1
+            if 0 <= idx < len(options):
+                selected.symmetric_difference_update({idx})
+                continue
+        print("❌ 输入无效，请重试")
+
+# 获取 OpsKit 环境变量
+OPSKIT_TOOL_TEMP_DIR = os.environ.get('OPSKIT_TOOL_TEMP_DIR', os.path.join(os.getcwd(), '.icon-converter-temp'))
+OPSKIT_BASE_PATH = os.environ.get('OPSKIT_BASE_PATH', os.path.expanduser('~/.opskit'))
+OPSKIT_WORKING_DIR = os.environ.get('OPSKIT_WORKING_DIR', os.getcwd())
+TOOL_NAME = os.environ.get('TOOL_NAME', 'icon-converter')
+TOOL_VERSION = os.environ.get('TOOL_VERSION', '1.0.0')
+
+# 创建临时目录
+os.makedirs(OPSKIT_TOOL_TEMP_DIR, exist_ok=True)
+
+# Import OpsKit utils
+sys.path.insert(0, os.path.join(OPSKIT_BASE_PATH, 'common/python'))
+from utils import get_env_var
 
 # Third-party imports
 try:
     from PIL import Image, ImageEnhance
 except ImportError as e:
-    print(f"Missing required dependency: {e}")
-    print("Please ensure all dependencies are installed.")
+    print(f"❌ 缺少必需依赖: {e}")
+    print("请确保所有依赖都已安装")
     sys.exit(1)
-
-# Initialize OpsKit components
-logger = get_logger(__name__)
-storage = get_storage('icon-converter')
 
 # Platform configurations
 PLATFORM_CONFIGS = {
@@ -117,29 +224,29 @@ class IconConverter:
         self.threads = get_env_var('THREADS', 4, int)
         self.keep_aspect_ratio = get_env_var('KEEP_ASPECT_RATIO', True, bool)
         
-        logger.info(f"🚀 Starting {self.tool_name}")
-        logger.debug(f"Configuration - output: {self.output_dir}, quality: {self.quality}")
+        print(f"🚀 启动 {self.tool_name}")
+        print(f"⚙️  配置 - 输出目录: {self.output_dir}, 质量: {self.quality}")
     
     def validate_image_file(self, file_path: str) -> bool:
         """Validate image file"""
         if not os.path.exists(file_path):
-            logger.error(f"File does not exist: {file_path}")
+            print(f"❌ 文件不存在: {file_path}")
             return False
         
         try:
             with Image.open(file_path) as img:
                 width, height = img.size
-                logger.info(f"✅ File loaded: {os.path.basename(file_path)} ({width}x{height})")
+                print(f"✅ 已加载: {os.path.basename(file_path)} ({width}x{height})")
                 return True
         except Exception as e:
-            logger.error(f"Cannot open image file: {e}")
+            print(f"❌ 无法打开图像文件: {e}")
             return False
     
     def get_input_file(self) -> Optional[str]:
         """Get input file from user"""
-        logger.info("📁 Select icon file:")
-        logger.info("1. Enter file path (you can drag file to terminal)")
-        logger.info("2. Select from current directory")
+        print("📁 选择图标文件:")
+        print("1. 直接输入文件路径（可拖拽至终端）")
+        print("2. 从当前目录选择")
         
         choice = get_input("Choose method (1-2): ", 
                           validator=lambda x: x in ['1', '2'])
@@ -151,16 +258,16 @@ class IconConverter:
     
     def _input_file_path(self) -> Optional[str]:
         """Direct file path input"""
-        logger.info("💡 Tip: You can drag and drop file to terminal window")
+        print("💡 提示: 可以将文件拖拽到终端")
         while True:
-            file_path = get_input("Enter file path: ")
+            file_path = get_input("输入文件路径")
             file_path = file_path.strip().strip('"\'')
             
             if self.validate_image_file(file_path):
                 return file_path
             else:
-                logger.error("❌ Invalid image file")
-                if not confirm("Try again?"):
+                print("❌ 无效的图片文件")
+                if not confirm("重试吗?"):
                     return None
     
     def _select_from_directory(self) -> Optional[str]:
@@ -177,11 +284,11 @@ class IconConverter:
             image_files.extend(glob.glob(pattern_upper))
         
         if not image_files:
-            logger.error("❌ No image files found in current directory")
+            print("❌ 当前目录未找到图片文件")
             return None
         
         # Show file details
-        logger.info(f"Available Image Files in {current_dir}:")
+        print(f"可用图片文件: {current_dir}:")
         file_details = []
         display_names = []
         
@@ -198,7 +305,7 @@ class IconConverter:
         
         # Log the files for user information
         for i, display_name in enumerate(display_names, 1):
-            logger.info(f"{i}. {display_name}")
+            print(f"{i}. {display_name}")
         
         selected_idx = select_from_list(display_names, "Select image file:")
         if selected_idx is not None:
@@ -209,7 +316,7 @@ class IconConverter:
     
     def select_platforms(self) -> List[str]:
         """Select target platforms"""
-        logger.info("🎯 Select target platforms:")
+        print("🎯 选择目标平台:")
         
         platform_choices = []
         for key, config in PLATFORM_CONFIGS.items():
@@ -254,12 +361,12 @@ class IconConverter:
                 'files': files
             }
         except ValueError:
-            logger.error("❌ Invalid size format")
+            print("❌ 尺寸格式无效")
             return None
     
     def show_generation_summary(self, platforms: List[str]) -> bool:
         """Show what will be generated"""
-        logger.info("📋 Generation Summary:")
+        print("📋 生成摘要:")
         
         total_icons = 0
         for platform in platforms:
@@ -270,12 +377,12 @@ class IconConverter:
             
             icon_count = len(config['files'])
             total_icons += icon_count
-            logger.info(f"• {config['name']}: {icon_count} icons")
+            print(f"• {config['name']}: {icon_count} 个图标")
         
-        logger.info(f"📊 Total: {total_icons} icons")
-        logger.info(f"📂 Output directory: {self.output_dir}")
+        print(f"📊 总计: {total_icons} 个图标")
+        print(f"📂 输出目录: {self.output_dir}")
         
-        return confirm("Proceed with generation?")
+        return confirm("是否开始生成?")
     
     def resize_image(self, source_image: Image.Image, target_size: int) -> Image.Image:
         """Resize image with high quality using safer approach"""
@@ -318,13 +425,13 @@ class IconConverter:
                         enhancer = ImageEnhance.Sharpness(resized)
                         resized = enhancer.enhance(1.1)  # Reduced enhancement factor
                     except Exception as e:
-                        logger.debug(f"Sharpening failed for {target_size}px: {e}")
+                        pass
                         # Continue without sharpening if it fails
                 
                 return resized
                 
         except Exception as e:
-            logger.error(f"Error in resize_image for size {target_size}: {e}")
+            print(f"❌ 调整大小失败 {target_size}px: {e}")
             # Return a basic resized image as fallback
             try:
                 fallback = source_image.resize((target_size, target_size), Image.Resampling.NEAREST)
@@ -332,7 +439,7 @@ class IconConverter:
                     fallback = fallback.convert('RGBA')
                 return fallback
             except Exception as fallback_error:
-                logger.error(f"Fallback resize also failed: {fallback_error}")
+                print(f"❌ 回退调整也失败: {fallback_error}")
                 return None
     
     def generate_icon(self, source_image: Image.Image, file_config: Dict, platform_dir: str) -> bool:
@@ -348,7 +455,7 @@ class IconConverter:
             
             # Validate resized image
             if resized_image is None:
-                logger.error(f"Failed to resize image for {filename}")
+                print(f"❌ 尺寸调整失败: {filename}")
                 return False
             
             # Handle different formats with safer saving approach
@@ -358,7 +465,7 @@ class IconConverter:
                     ico_image = resized_image.convert('RGB')
                     ico_image.save(output_path, format='ICO', sizes=[(target_size, target_size)])
                 except Exception as ico_error:
-                    logger.warning(f"ICO save failed for {filename}, trying PNG fallback: {ico_error}")
+                    print(f"⚠️  ICO 保存失败，尝试 PNG: {ico_error}")
                     # Fallback to PNG if ICO fails
                     png_path = output_path.replace('.ico', '.png')
                     resized_image.save(png_path, format='PNG')
@@ -375,29 +482,26 @@ class IconConverter:
                     
                     # Save with basic PNG parameters (avoid optimization that might cause issues)
                     clean_image.save(output_path, format='PNG')
-                    
                 except Exception as png_error:
-                    logger.warning(f"Enhanced PNG save failed for {filename}, trying basic save: {png_error}")
+                    print(f"⚠️  PNG 增强保存失败，尝试基础保存: {png_error}")
                     # Fallback to most basic PNG save
                     try:
                         basic_image = resized_image.convert('RGB')
                         basic_image.save(output_path, format='PNG')
                     except Exception as basic_error:
-                        logger.error(f"All PNG save methods failed for {filename}: {basic_error}")
+                        print(f"❌ PNG 所有保存方式均失败: {filename}: {basic_error}")
                         return False
             
             # Verify the generated file
             if os.path.exists(output_path) and os.path.getsize(output_path) > 0:
-                logger.debug(f"✅ Generated: {filename} ({target_size}x{target_size})")
+                # 生成成功
                 return True
             else:
-                logger.error(f"❌ Generated file is empty or missing: {filename}")
+                print(f"❌ 生成的文件为空或缺失: {filename}")
                 return False
             
         except Exception as e:
-            logger.error(f"❌ Failed to generate {filename}: {e}")
-            import traceback
-            logger.debug(f"Full traceback for {filename}: {traceback.format_exc()}")
+            print(f"❌ 生成失败 {filename}: {e}")
             return False
     
     def generate_platform_readme(self, platform: str, platform_dir: str):
@@ -524,23 +628,23 @@ Each icon maintains the original aspect ratio and quality.
         platform_dir = os.path.join(self.output_dir, platform)
         os.makedirs(platform_dir, exist_ok=True)
         
-        logger.info(f"🔄 Generating {config['name']} icons...")
+        print(f"🔄 正在生成 {config['name']} 图标...")
         
         success_count = 0
         total_count = len(config['files'])
         
         # Use sequential processing to avoid any threading issues
         for file_config in config['files']:
-            logger.debug(f"Generating {file_config['name']} ({file_config['size']}px)...")
+            # 逐个生成
             if self.generate_icon(source_image, file_config, platform_dir):
                 success_count += 1
             else:
-                logger.warning(f"Failed to generate {file_config['name']}")
+                print(f"⚠️  生成失败: {file_config['name']}")
         
         # Generate README
         self.generate_platform_readme(platform, platform_dir)
         
-        logger.info(f"✅ {config['name']}: {success_count}/{total_count} icons generated")
+        print(f"✅ {config['name']}: {success_count}/{total_count} 个图标已生成")
         
         return {
             'platform': platform,
@@ -584,13 +688,13 @@ Each icon maintains the original aspect ratio and quality.
             json.dump(report, f, indent=2, ensure_ascii=False)
         
         # Display summary
-        logger.info(f"✅ Generation completed!")
-        logger.info(f"📊 Success: {success_icons}/{total_icons} icons")
-        logger.info(f"⏱️  Duration: {duration:.1f} seconds")
-        logger.info(f"📁 Output: {self.output_dir}")
+        print(f"✅ 生成完成！")
+        print(f"📊 成功: {success_icons}/{total_icons} 个图标")
+        print(f"⏱️  用时: {duration:.1f} 秒")
+        print(f"📁 输出目录: {self.output_dir}")
         
         if failed_icons > 0:
-            logger.warning(f"⚠️  Failed: {failed_icons} icons")
+            print(f"⚠️  失败: {failed_icons} 个图标")
     
     def main_operation(self, input_file: str, platforms: List[str]):
         """Main icon generation operation"""
@@ -618,33 +722,33 @@ Each icon maintains the original aspect ratio and quality.
         """Main tool execution"""
         try:
             # Display welcome
-            logger.info("🎨 Icon Converter Tool")
-            logger.info("Convert icons for multiple platforms")
+            print("🎨 Icon Converter Tool")
+            print("将单图标生成多平台规格")
             
             # Get input file
             input_file = self.get_input_file()
             if not input_file:
-                logger.info("No input file selected")
+                print("未选择输入文件")
                 return
             
             # Select platforms
             platforms = self.select_platforms()
             if not platforms:
-                logger.info("No platforms selected")
+                print("未选择平台")
                 return
             
             # Show summary and confirm
             if not self.show_generation_summary(platforms):
-                logger.info("Operation cancelled by user")
+                print("操作已取消")
                 return
             
             # Generate icons
             self.main_operation(input_file, platforms)
             
         except KeyboardInterrupt:
-            logger.info("❌ Operation cancelled by user")
+            print("❌ 用户取消操作")
         except Exception as e:
-            logger.error(f"❌ Unexpected error: {e}")
+            print(f"❌ 程序错误: {e}")
             sys.exit(1)
 
 

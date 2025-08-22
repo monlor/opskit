@@ -1,15 +1,34 @@
 #!/bin/bash
 
-# Port Scanner Tool
+# Port Scanner Tool - OpsKit Version
 # Simple network port scanner with visual output
 
-# Source shell libraries
-source "${OPSKIT_BASE_PATH}/common/shell/logger.sh"
-source "${OPSKIT_BASE_PATH}/common/shell/interactive.sh"
-source "${OPSKIT_BASE_PATH}/common/shell/utils.sh"
+# 获取 OpsKit 环境变量
+OPSKIT_TOOL_TEMP_DIR="${OPSKIT_TOOL_TEMP_DIR:-$(pwd)/.port-scanner-temp}"
+OPSKIT_BASE_PATH="${OPSKIT_BASE_PATH:-$HOME/.opskit}"
+OPSKIT_WORKING_DIR="${OPSKIT_WORKING_DIR:-$(pwd)}"
+TOOL_NAME="${TOOL_NAME:-port-scanner}"
+TOOL_VERSION="${TOOL_VERSION:-1.0.0}"
 
-# Initialize tool (TOOL_NAME and TOOL_VERSION are injected by framework)
-tool_start "${TOOL_NAME:-port-scanner}"
+# 创建临时目录
+mkdir -p "$OPSKIT_TOOL_TEMP_DIR"
+
+# 日志函数
+log_info() {
+    echo "🔍 [INFO] $(date '+%Y-%m-%d %H:%M:%S') - $1" >&2
+}
+
+log_success() {
+    echo "✅ [SUCCESS] $(date '+%Y-%m-%d %H:%M:%S') - $1" >&2
+}
+
+log_warning() {
+    echo "⚠️  [WARNING] $(date '+%Y-%m-%d %H:%M:%S') - $1" >&2
+}
+
+log_error() {
+    echo "❌ [ERROR] $(date '+%Y-%m-%d %H:%M:%S') - $1" >&2
+}
 
 # Default configuration
 DEFAULT_HOST="localhost"
@@ -33,19 +52,20 @@ declare -a closed_ports=()
 
 # Helper functions
 usage() {
-    section "Port Scanner Usage"
-    info "Usage: $0 [options]"
-    info ""
-    info "Options:"
-    info "  -h, --host HOST      Target host (default: $DEFAULT_HOST)"
-    info "  -p, --ports RANGE    Port range (default: $DEFAULT_PORTS)"
-    info "  -t, --timeout SEC    Connection timeout (default: $DEFAULT_TIMEOUT)"
-    info "  --help              Show this help"
-    info ""
-    info "Examples:"
-    info "  $0 -h 192.168.1.1 -p 80,443,22"
-    info "  $0 -h localhost -p 1-65535"
-    info "  $0 --host example.com --ports 80,443,8080,3000"
+    echo "🔍 端口扫描工具 - 使用说明"
+    echo "=" * 50
+    echo "用法: $0 [选项]"
+    echo ""
+    echo "选项:"
+    echo "  -h, --host HOST      目标主机 (默认: $DEFAULT_HOST)"
+    echo "  -p, --ports RANGE    端口范围 (默认: $DEFAULT_PORTS)"
+    echo "  -t, --timeout SEC    连接超时 (默认: $DEFAULT_TIMEOUT)"
+    echo "  --help              显示此帮助"
+    echo ""
+    echo "示例:"
+    echo "  $0 -h 192.168.1.1 -p 80,443,22"
+    echo "  $0 -h localhost -p 1-65535"
+    echo "  $0 --host example.com --ports 80,443,8080,3000"
 }
 
 # Parse command line arguments
@@ -68,7 +88,7 @@ while [[ $# -gt 0 ]]; do
             exit 0
             ;;
         *)
-            error "Unknown option: $1"
+            log_error "未知选项: $1"
             usage
             exit 1
             ;;
@@ -102,13 +122,13 @@ get_service_name() {
 validate_host() {
     local host="$1"
     if [[ -z "$host" ]]; then
-        error "Host cannot be empty"
+        log_error "主机地址不能为空"
         return 1
     fi
     
     # Try to resolve hostname
     if ! getent hosts "$host" >/dev/null 2>&1; then
-        warning "Cannot resolve hostname '$host', proceeding anyway"
+        log_warning "无法解析主机名 '$host'，继续尝试"
     fi
     
     return 0
@@ -128,7 +148,7 @@ parse_ports() {
             if [[ $range -ge 1 && $range -le 65535 ]]; then
                 ports+=("$range")
             else
-                error "Invalid port: $range (must be 1-65535)"
+                log_error "无效端口: $range (必须是 1-65535)"
                 return 1
             fi
         elif [[ "$range" =~ ^([0-9]+)-([0-9]+)$ ]]; then
@@ -141,11 +161,11 @@ parse_ports() {
                     ports+=("$port")
                 done
             else
-                error "Invalid port range: $range"
+                log_error "无效端口范围: $range"
                 return 1
             fi
         else
-            error "Invalid port specification: $range"
+            log_error "无效端口格式: $range"
             return 1
         fi
     done
@@ -186,7 +206,7 @@ scan_ports() {
         progress_step=1
     fi
     
-    operation_start "Port scanning" "Scanning $host ports ${PORTS} ($PROTOCOL)"
+    log_info "开始扫描 $host 端口 ${PORTS} ($PROTOCOL)"
     
     for port in "${ports_to_scan[@]}"; do
         ((scanned++))
@@ -201,62 +221,75 @@ scan_ports() {
         # Show progress
         if [[ $((scanned % progress_step)) -eq 0 ]] || [[ $scanned -eq $total ]]; then
             local percentage=$((scanned * 100 / total))
-            progress "Progress: $percentage% ($scanned/$total ports scanned)"
+            echo "⏳ 进度: $percentage% ($scanned/$total 个端口已扫描)"
         fi
     done
     
-    success "Scan complete: ${#open_ports[@]} open, ${#closed_ports[@]} closed"
+    log_success "扫描完成: ${#open_ports[@]} 个开放端口, ${#closed_ports[@]} 个关闭端口"
 }
 
 # Display results in visual format
 display_results() {
     local host="$1"
     
-    section "Port Scan Results for $host"
+    echo ""
+    echo "🔍 $host 的端口扫描结果"
+    echo "=" * 50
     
     if [[ ${#open_ports[@]} -gt 0 ]]; then
-        subsection "🟢 Open Ports Found"
-        info "┌─────────┬─────────────┬─────────────────────────────────┐"
-        info "│  PORT   │    STATE    │            SERVICE              │"
-        info "├─────────┼─────────────┼─────────────────────────────────┤"
+        echo ""
+        echo "🟢 发现开放端口"
+        echo "┌─────────┬─────────────┬─────────────────────────────────┐"
+        echo "│  端口   │    状态     │            服务                 │"
+        echo "├─────────┼─────────────┼─────────────────────────────────┤"
         
         for port_info in "${open_ports[@]}"; do
             local port="${port_info%:*}"
             local service="${port_info#*:}"
-            info "$(printf "│  %-5s  │    OPEN     │  %-29s  │" "$port" "$service")"
+            printf "│  %-5s  │    开放     │  %-29s  │\n" "$port" "$service"
         done
         
-        info "└─────────┴─────────────┴─────────────────────────────────┘"
+        echo "└─────────┴─────────────┴─────────────────────────────────┘"
     else
-        warning "🟡 No open ports found in the specified range"
+        echo ""
+        log_warning "🟡 在指定范围内未发现开放端口"
     fi
     
     # Summary
     local total_scanned=$((${#open_ports[@]} + ${#closed_ports[@]}))
-    display_info "📊 Summary" \
-        "Host" "$host" \
-        "Port Range" "$PORTS" \
-        "Protocol" "$PROTOCOL" \
-        "Total Scanned" "$total_scanned" \
-        "Open Ports" "${#open_ports[@]}" \
-        "Closed Ports" "${#closed_ports[@]}"
+    echo ""
+    echo "📊 扫描统计"
+    echo "-" * 30
+    echo "🌐 主机: $host"
+    echo "🔢 端口范围: $PORTS"
+    echo "🔌 协议: $PROTOCOL"
+    echo "📈 总扫描数: $total_scanned"
+    echo "✅ 开放端口: ${#open_ports[@]}"
+    echo "❌ 关闭端口: ${#closed_ports[@]}"
 }
 
 # Main execution
 main() {
+    echo "🔍 端口扫描工具"
+    echo "=" * 50
+    echo "⚙️  工具版本: $TOOL_VERSION"
+    echo "📂 临时目录: $OPSKIT_TOOL_TEMP_DIR"
+    echo "📁 工作目录: $OPSKIT_WORKING_DIR"
+    echo ""
+    
     # Validation phase
-    step_start "Checking system requirements"
+    log_info "检查系统要求"
     if ! command -v timeout >/dev/null 2>&1; then
-        error "timeout command not found. Please install coreutils."
+        log_error "未找到 timeout 命令。请安装 coreutils。"
         exit 1
     fi
-    step_complete "Checking system requirements"
+    log_success "系统要求检查完成"
     
-    step_start "Validating input parameters"
+    log_info "验证输入参数"
     if ! validate_host "$HOST"; then
         exit 1
     fi
-    step_complete "Validating input parameters"
+    log_success "输入参数验证完成"
     
     # Parse and validate ports
     local port_list
@@ -265,15 +298,19 @@ main() {
     fi
     
     # Scan phase
-    step_start "Port scanning"
+    log_info "开始端口扫描"
     scan_ports "$HOST" "$port_list"
-    step_complete "Port scanning"
+    log_success "端口扫描完成"
     
     # Display results
     display_results "$HOST"
+    
+    echo ""
+    log_success "✅ 端口扫描任务完成"
 }
 
-# Run main function
-main "$@"
-
-tool_complete "${TOOL_NAME:-port-scanner}"
+# Run main function with error handling
+if ! main "$@"; then
+    log_error "端口扫描失败"
+    exit 1
+fi

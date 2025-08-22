@@ -77,7 +77,7 @@ def setup_opskit():
     print("\nNext steps:")
     print("1. Add OpsKit to your environment:")
     print(f"   export OPSKIT_BASE_PATH=\"{opskit_root}\"")
-    print(f"   export PATH=\"{opskit_root}/bin:$PATH\"")
+    print(f"   export PATH=\"$OPSKIT_BASE_PATH/bin:$PATH\"")
     print("2. Run a tool:")
     print("   opskit run mysql-sync")
     print("\nTool dependencies will be installed automatically on first run.")

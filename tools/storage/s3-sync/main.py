@@ -240,7 +240,7 @@ class S3SyncTool:
     
     def list_buckets(self, connection_details: Optional[Dict] = None) -> List[str]:
         """
-        List available S3 buckets
+        List available S3 buckets, with fallback to manual input if list permission is unavailable
         
         :param connection_details: Optional connection details
         :return: List of bucket names
@@ -250,24 +250,128 @@ class S3SyncTool:
             response = client.list_buckets()
             return [bucket['Name'] for bucket in response['Buckets']]
         except Exception as e:
-            print(f"❌ Error listing buckets: {e}")
-            return []
+            print(f"⚠️ Unable to list buckets automatically: {e}")
+            print("🔐 This might be due to insufficient ListBucket permissions.")
+            
+            # Fallback to manual bucket input
+            return self._manual_bucket_input()
     
-    def _interactive_bucket_selection(self, buckets: List[str], select_type: str = 'source') -> List[str]:
+    def _manual_bucket_input(self) -> List[str]:
         """
-        Interactive bucket selection
+        Allow user to manually input bucket names when list_buckets fails
         
-        :param buckets: List of available buckets
-        :param select_type: 'source' or 'target'
-        :return: Selected buckets
+        :return: List of manually entered bucket names
         """
-        print(f"\n📦 Available {select_type.capitalize()} Buckets:")
-        for i, bucket in enumerate(buckets, 1):
-            print(f"{i}. {bucket}")
+        print("\n📝 Manual Bucket Input")
+        print("You can enter bucket names manually (one per line or comma-separated)")
+        print("Examples:")
+        print("  Single: my-bucket")
+        print("  Multiple: bucket1,bucket2,bucket3")
+        print("  Multiple lines: Enter each bucket name and press Enter, then empty line to finish")
+        
+        bucket_names = []
         
         while True:
             try:
-                prompt = "\nEnter bucket numbers" + (" (e.g., 1,3,5 or 'all'): " if select_type == 'source' else ": ")
+                user_input = input("\nEnter bucket name(s) (or press Enter to finish): ").strip()
+                
+                if not user_input:
+                    if bucket_names:
+                        break
+                    else:
+                        print("⚠️ Please enter at least one bucket name.")
+                        continue
+                
+                # Handle comma-separated input
+                if ',' in user_input:
+                    new_buckets = [name.strip() for name in user_input.split(',') if name.strip()]
+                    bucket_names.extend(new_buckets)
+                    print(f"✅ Added buckets: {', '.join(new_buckets)}")
+                else:
+                    # Single bucket name
+                    bucket_names.append(user_input)
+                    print(f"✅ Added bucket: {user_input}")
+                
+                print(f"📋 Current bucket list: {', '.join(bucket_names)}")
+                
+                # Ask if user wants to continue adding more buckets
+                if input("Add more buckets? (y/n): ").strip().lower() != 'y':
+                    break
+                    
+            except KeyboardInterrupt:
+                print("\n❌ Manual bucket input cancelled.")
+                return []
+        
+        if bucket_names:
+            print(f"\n📦 Final bucket list: {', '.join(bucket_names)}")
+            return bucket_names
+        else:
+            print("⚠️ No buckets entered.")
+            return []
+    
+    def _validate_bucket_access(self, client, bucket_name: str) -> bool:
+        """
+        Validate if a bucket exists and is accessible
+        
+        :param client: S3 client
+        :param bucket_name: Bucket name to validate
+        :return: True if bucket is accessible, False otherwise
+        """
+        try:
+            client.head_bucket(Bucket=bucket_name)
+            return True
+        except ClientError as e:
+            error_code = e.response['Error']['Code']
+            if error_code == '404':
+                print(f"❌ Bucket '{bucket_name}' does not exist or is not accessible")
+            elif error_code == '403':
+                print(f"⚠️ Access denied to bucket '{bucket_name}' (insufficient permissions)")
+            else:
+                print(f"❌ Error accessing bucket '{bucket_name}': {e}")
+            return False
+        except Exception as e:
+            print(f"❌ Unexpected error validating bucket '{bucket_name}': {e}")
+            return False
+    
+    def _interactive_bucket_selection(self, buckets: List[str], select_type: str = 'source', 
+                                      manual_input: bool = False) -> List[str]:
+        """
+        Interactive bucket selection with support for manual input
+        
+        :param buckets: List of available buckets
+        :param select_type: 'source' or 'target'
+        :param manual_input: True if buckets were manually entered
+        :return: Selected buckets
+        """
+        if not buckets:
+            print(f"⚠️ No {select_type} buckets available.")
+            return []
+        
+        # If buckets were manually entered, ask if user wants to use all or select specific ones
+        if manual_input:
+            print(f"\n📦 Manually entered {select_type.capitalize()} Buckets:")
+            for i, bucket in enumerate(buckets, 1):
+                print(f"{i}. {bucket}")
+            
+            if len(buckets) == 1:
+                print(f"✅ Using single bucket: {buckets[0]}")
+                return buckets
+            
+            use_all = input(f"\nUse all {len(buckets)} buckets? (y/n): ").strip().lower()
+            if use_all == 'y':
+                return buckets
+        else:
+            print(f"\n📦 Available {select_type.capitalize()} Buckets:")
+            for i, bucket in enumerate(buckets, 1):
+                print(f"{i}. {bucket}")
+        
+        while True:
+            try:
+                if select_type == 'source':
+                    prompt = "\nEnter bucket numbers (e.g., 1,3,5 or 'all'): "
+                else:
+                    prompt = "\nEnter target bucket number: "
+                    
                 selection = input(prompt).strip().lower()
                 
                 if select_type == 'source' and selection == 'all':
@@ -350,6 +454,8 @@ class S3SyncTool:
         print("=" * 60)
         
         for src_bucket in source_buckets:
+            bucket_successful = 0
+            bucket_failed = 0
             target_bucket = src_bucket  # Use same bucket name as source
             
             try:
@@ -414,36 +520,31 @@ class S3SyncTool:
                             success, _, error = future.result()
                             if success:
                                 successful_objects += 1
-                                if successful_objects % 100 == 0:
-                                    print(f"📈 Progress: {successful_objects}/{len(object_keys)} objects copied")
+                                bucket_successful += 1
+                                if bucket_successful % 100 == 0:
+                                    print(f"📈 Progress: {bucket_successful}/{len(object_keys)} objects copied from {src_bucket}")
                             else:
                                 failed_objects += 1
+                                bucket_failed += 1
                                 print(f"❌ Error copying object {key}: {error}")
                         except Exception as exc:
                             failed_objects += 1
+                            bucket_failed += 1
                             print(f"❌ Unexpected error copying {key}: {exc}")
                 
                 # Sync summary for this bucket
                 print("-" * 50)
                 print(f"🎉 Bucket sync completed: {src_bucket}")
                 print(f"📋 Objects processed: {len(object_keys)}")
-                bucket_successful = successful_objects - (total_objects - len(object_keys))
                 print(f"✅ Successful: {bucket_successful}")
-                print(f"❌ Failed: {failed_objects}")
+                print(f"❌ Failed: {bucket_failed}")
                 print("-" * 50)
             
             except ClientError as e:
                 print(f"❌ Error syncing {src_bucket}: {e}")
         
-        # Final summary
-        print("=" * 60)
-        print("🎉 SYNC OPERATION COMPLETED")
-        print("=" * 60)
-        print(f"📊 Total objects: {total_objects}")
-        print(f"✅ Successfully synced: {successful_objects}")
-        print(f"❌ Failed objects: {failed_objects}")
-        print("=" * 60)
-        
+        # Return results without printing final summary here
+        # (final summary will be printed in the run method)
         return total_objects, successful_objects, failed_objects
     
     def run(self):
@@ -453,13 +554,54 @@ class S3SyncTool:
             
             # Source connection and buckets
             source_connection = self._input_connection_details('source')
-            source_buckets = self.list_buckets(source_connection)
+            
+            # Try to list buckets, with fallback to manual input
+            source_buckets = []
+            manual_input = False
+            
+            try:
+                client = self._get_s3_client(source_connection)
+                response = client.list_buckets()
+                source_buckets = [bucket['Name'] for bucket in response['Buckets']]
+            except Exception as e:
+                print(f"⚠️ Unable to list buckets automatically: {e}")
+                print("🔐 This might be due to insufficient ListBucket permissions.")
+                source_buckets = self._manual_bucket_input()
+                manual_input = True
             
             if not source_buckets:
-                print("⚠️ No source buckets found.")
+                print("⚠️ No source buckets available.")
                 return
             
-            selected_source_buckets = self._interactive_bucket_selection(source_buckets)
+            selected_source_buckets = self._interactive_bucket_selection(source_buckets, 'source', manual_input)
+            
+            if not selected_source_buckets:
+                print("⚠️ No source buckets selected.")
+                return
+            
+            # Validate manually entered buckets if needed
+            if manual_input:
+                print("\n🔍 Validating manually entered buckets...")
+                client = self._get_s3_client(source_connection)
+                valid_buckets = []
+                
+                for bucket in selected_source_buckets:
+                    if self._validate_bucket_access(client, bucket):
+                        print(f"✅ Bucket '{bucket}' is accessible")
+                        valid_buckets.append(bucket)
+                    else:
+                        # Ask user if they want to continue without this bucket
+                        continue_without = input(f"Continue without bucket '{bucket}'? (y/n): ").strip().lower()
+                        if continue_without != 'y':
+                            print("❌ Sync operation cancelled.")
+                            return
+                
+                if not valid_buckets:
+                    print("❌ No valid source buckets available.")
+                    return
+                
+                selected_source_buckets = valid_buckets
+                print(f"✅ Using validated buckets: {', '.join(selected_source_buckets)}")
             
             # Target connection
             target_connection = self._input_connection_details('target')
@@ -491,12 +633,13 @@ class S3SyncTool:
             )
             
             # Final summary
-            print("\n🎉 Sync Operation Summary:")
+            print("\n" + "=" * 60)
+            print("🎉 SYNC OPERATION COMPLETED")
+            print("=" * 60)
             print(f"📊 Total Objects: {total}")
             print(f"✅ Successfully Synced: {successful}")
             print(f"❌ Failed Objects: {failed}")
-            
-            print("🎉 Sync completed.")
+            print("=" * 60)
         
         except KeyboardInterrupt:
             print("\n❌ Sync operation cancelled by user.")

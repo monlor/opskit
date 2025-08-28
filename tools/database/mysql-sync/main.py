@@ -280,7 +280,7 @@ class MySQLSyncTool:
                 
                 if database_name not in existing_databases:
                     print(f"📁 目标数据库 '{database_name}' 不存在，正在创建...")
-                    cursor.execute(f"CREATE DATABASE `{database_name}` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci")
+                    cursor.execute(f"CREATE DATABASE `{database_name}`")
                     print(f"✅ 数据库 '{database_name}' 创建成功")
                 else:
                     print(f"📁 目标数据库 '{database_name}' 已存在")

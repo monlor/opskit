@@ -155,6 +155,8 @@ Check system status and health:
 opskit status                    # System status
 opskit version                   # Version information
 opskit update                    # Update OpsKit via git pull
+opskit clean-cache --all         # Clean all caches (from env.cache_dir)
+opskit clean-cache <service>     # Clean cache for a specific tool
 ```
 
 ## 🏗️ Architecture

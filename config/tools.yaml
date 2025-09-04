@@ -41,6 +41,12 @@ tools:
       description: Export Kubernetes resources from specified namespaces with multi-namespace selection and kubectl neat cleaning
       keywords: [kubernetes, k8s, resource, export, backup, namespace, kubectl, yaml]
       dependencies: [kubectl, krew]  # kubectl 必需，krew 可选但推荐
+      
+    k8s-service-discovery:
+      version: "1.0.0"
+      description: Discover and display comprehensive service environment information for K8s clusters with workload mapping, access URLs, and Bitnami credential discovery
+      keywords: [kubernetes, k8s, service, discovery, environment, bitnami, credentials, access, ingress, nodeport]
+      dependencies: [kubectl]  # kubectl 必需，用于集群访问配置
 
   storage:
     s3-sync:

@@ -11,6 +11,7 @@ Simple command line interface for OpsKit providing:
 import os
 import sys
 import subprocess
+import shutil
 from typing import Dict, List, Optional
 from pathlib import Path
 
@@ -549,3 +550,50 @@ Tool Management:
 For more information, visit: https://github.com/monlor/opskit
 """
         self._print_panel(help_text.strip(), "Help", "cyan")
+
+    def clean_cache(self, service: Optional[str] = None, clean_all: bool = False) -> None:
+        """Clean cache directory, optionally for a specific service/tool.
+
+        Args:
+            service: Tool/service name to clean (under cache/tools/<service>)
+            clean_all: If True, remove the entire cache directory
+        """
+        cache_dir = Path(env.cache_dir)
+
+        # Ensure cache path is resolved from env.py (not hardcoded)
+        if clean_all:
+            if not cache_dir.exists():
+                self._print(f"No cache directory found at: {cache_dir}", "yellow")
+                return
+
+            if not self._confirm(f"This will delete ALL cache at '{cache_dir}'. Continue?", False):
+                self._print("Cancelled.", "yellow")
+                return
+
+            try:
+                shutil.rmtree(cache_dir)
+                cache_dir.mkdir(parents=True, exist_ok=True)
+                self._print(f"✅ Cleared all cache at: {cache_dir}", "green")
+            except Exception as e:
+                self._print(f"❌ Failed to clear cache: {e}", "red")
+            return
+
+        # Service-specific cleaning
+        if not service:
+            self._print("Please specify a service (tool name) or use --all to clear all cache.", "yellow")
+            return
+
+        service_cache_dir = cache_dir / 'tools' / service
+        if not service_cache_dir.exists():
+            self._print(f"No cache found for service '{service}' at: {service_cache_dir}", "yellow")
+            return
+
+        if not self._confirm(f"Delete cache for service '{service}' at '{service_cache_dir}'?", False):
+            self._print("Cancelled.", "yellow")
+            return
+
+        try:
+            shutil.rmtree(service_cache_dir)
+            self._print(f"✅ Cleared cache for service '{service}'", "green")
+        except Exception as e:
+            self._print(f"❌ Failed to clear service cache: {e}", "red")

@@ -199,6 +199,19 @@ def version():
     print_version()
 
 
+@cli.command(name='clean-cache')
+@click.argument('service', required=False)
+@click.option('--all', 'clean_all', is_flag=True, help='Clean all caches')
+@click.option('--debug', is_flag=True, help='Enable debug mode')
+def clean_cache_cmd(service, clean_all, debug):
+    """Clean cache. Specify SERVICE to clean a single tool, or use --all."""
+    try:
+        opskit_cli = OpsKitCLI()
+        opskit_cli.clean_cache(service=service, clean_all=clean_all)
+    except Exception as e:
+        handle_error(e, debug or _debug_mode)
+
+
 @cli.command()
 @click.argument('shell', type=click.Choice(['bash', 'zsh', 'fish']), required=True)
 def completion(shell):
